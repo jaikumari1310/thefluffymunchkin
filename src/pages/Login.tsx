@@ -11,8 +11,7 @@ import { toast } from 'sonner';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading: authLoading } = useAuth();
-  
+  const { login, loginWithGoogle, isLoading: authLoading } = useAuth();  
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,6 +54,26 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+const handleGoogleLogin = async () => {
+  setError('');
+  setIsLoading(true);
+
+  try {
+    const result = await loginWithGoogle();
+
+    if (result.success) {
+      toast.success('Signed in with Google!');
+      navigate('/', { replace: true });
+    } else {
+      setError(result.error || 'Google login failed');
+    }
+  } catch (err) {
+    setError('Google authentication failed');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   if (authLoading) {
     return (
@@ -179,9 +198,8 @@ export default function Login() {
                 type="button"
                 variant="outline"
                 className="w-full h-11 text-base font-medium gap-3"
-                onClick={() => {
-                  toast.info('Google Sign-In requires Lovable Cloud to be enabled. Please enable Cloud integration first.');
-                }}
+                onClick={handleGoogleLogin}
+				disabled={isLoading}
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path
