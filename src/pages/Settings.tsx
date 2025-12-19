@@ -6,7 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { getSettings, updateSettings, Settings } from '@/lib/db';
-import { Save } from 'lucide-react';
+import { Save, Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+const API_BASE_URL = `https://likthkgwdrvfsrthgzbw.supabase.co/functions/v1`;
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({
@@ -29,6 +31,10 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  
+  // Generate a simple API key based on location code (in production, use proper auth)
+  const apiKey = `tfm_${settings.locationCode || '01'}_${btoa(settings.shopName || 'shop').slice(0, 8)}`;
 
   useEffect(() => {
     loadSettings();
@@ -172,12 +178,16 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Kiosk Configuration (POS PATROL) */}
-        <div className="stat-card">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Kiosk Configuration</h2>
+        {/* POS Patrol Integration */}
+        <div className="stat-card border-2 border-primary/20">
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground">POS Patrol Integration</h2>
+            <Badge variant="secondary">Mall API</Badge>
+          </div>
           <p className="mb-4 text-sm text-muted-foreground">
-            Configure POS PATROL integration settings for mall reporting
+            Configure and share API access with mall management for sales reporting
           </p>
+          
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="locationCode">Location Code</Label>
@@ -217,6 +227,74 @@ export default function SettingsPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Active shift number
               </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4 rounded-lg bg-muted/50 p-4">
+            <h3 className="font-medium text-foreground">API Access Details</h3>
+            
+            <div>
+              <Label>API Endpoint URL</Label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={`${API_BASE_URL}/pos-patrol-api`}
+                  readOnly
+                  className="font-mono text-sm bg-background"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${API_BASE_URL}/pos-patrol-api`);
+                    toast.success('API URL copied to clipboard');
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Share this URL with mall management
+              </p>
+            </div>
+
+            <div>
+              <Label>API Key / Token</Label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={showApiKey ? apiKey : '••••••••••••••••'}
+                  readOnly
+                  className="font-mono text-sm bg-background"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    navigator.clipboard.writeText(apiKey);
+                    toast.success('API key copied to clipboard');
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Include in API requests as Authorization header
+              </p>
+            </div>
+
+            <div>
+              <Label>Example API Request</Label>
+              <div className="mt-1 rounded-md bg-background p-3 font-mono text-xs overflow-x-auto">
+                <pre className="text-muted-foreground">
+{`GET ${API_BASE_URL}/pos-patrol-api?from_date=2024-12-01&to_date=2024-12-31`}
+                </pre>
+              </div>
             </div>
           </div>
         </div>
