@@ -11,22 +11,28 @@ import {
   ChevronLeft,
   ChevronRight,
   IndianRupee,
+  UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Receipt, label: 'New Bill', path: '/billing' },
-  { icon: FileText, label: 'Invoices', path: '/invoices' },
-  { icon: Users, label: 'Customers', path: '/customers' },
-  { icon: Package, label: 'Products', path: '/products' },
-  { icon: BarChart3, label: 'Reports', path: '/reports' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/', adminOnly: false },
+  { icon: Receipt, label: 'New Bill', path: '/billing', adminOnly: false },
+  { icon: FileText, label: 'Invoices', path: '/invoices', adminOnly: false },
+  { icon: Users, label: 'Customers', path: '/customers', adminOnly: false },
+  { icon: Package, label: 'Products', path: '/products', adminOnly: false },
+  { icon: BarChart3, label: 'Reports', path: '/reports', adminOnly: false },
+  { icon: UserCog, label: 'Users', path: '/users', adminOnly: true },
+  { icon: Settings, label: 'Settings', path: '/settings', adminOnly: false },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || user?.role === 'admin');
 
   return (
     <aside
@@ -52,7 +58,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 p-3">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <NavLink
