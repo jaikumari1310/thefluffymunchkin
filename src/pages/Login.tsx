@@ -66,10 +66,20 @@ const handleGoogleLogin = async () => {
       toast.success('Signed in with Google!');
       navigate('/', { replace: true });
     } else {
-      setError(result.error || 'Google login failed');
+      // Provide user-friendly error messages
+      let errorMessage = result.error || 'Google login failed';
+      if (errorMessage.includes('not approved')) {
+        errorMessage = 'This Google account is not approved. Contact your administrator.';
+      } else if (errorMessage.includes('timed out')) {
+        errorMessage = 'Sign-in timed out. Please try again.';
+      } else if (errorMessage.includes('cancelled') || errorMessage.includes('dismissed')) {
+        errorMessage = 'Sign-in was cancelled.';
+      }
+      setError(errorMessage);
     }
   } catch (err) {
-    setError('Google authentication failed');
+    const errorMessage = err instanceof Error ? err.message : 'Google authentication failed';
+    setError(errorMessage);
   } finally {
     setIsLoading(false);
   }
