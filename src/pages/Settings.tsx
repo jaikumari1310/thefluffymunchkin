@@ -79,16 +79,16 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">Configure your shop and invoice settings</p>
+      <div className="mb-6 px-2 sm:px-0">
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">Settings</h1>
+        <p className="text-sm text-muted-foreground">Configure your shop and invoice settings</p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-4 sm:space-y-6 px-2 sm:px-0">
         {/* Shop Details */}
         <div className="stat-card">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Shop Details</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <h2 className="mb-4 text-base sm:text-lg font-semibold text-foreground">Shop Details</h2>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Label htmlFor="shopName">Shop Name</Label>
               <Input
@@ -151,8 +151,8 @@ export default function SettingsPage() {
 
         {/* Invoice Settings */}
         <div className="stat-card">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Invoice Settings</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <h2 className="mb-4 text-base sm:text-lg font-semibold text-foreground">Invoice Settings</h2>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
               <Input
@@ -180,15 +180,15 @@ export default function SettingsPage() {
 
         {/* POS Patrol Integration */}
         <div className="stat-card border-2 border-primary/20">
-          <div className="mb-4 flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-foreground">POS Patrol Integration</h2>
-            <Badge variant="secondary">Mall API</Badge>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">POS Patrol Integration</h2>
+            <Badge variant="secondary" className="text-xs">Mall API</Badge>
           </div>
-          <p className="mb-4 text-sm text-muted-foreground">
+          <p className="mb-4 text-xs sm:text-sm text-muted-foreground">
             Configure and share API access with mall management for sales reporting
           </p>
           
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
             <div>
               <Label htmlFor="locationCode">Location Code</Label>
               <Input
@@ -230,26 +230,28 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="mt-6 space-y-4 rounded-lg bg-muted/50 p-4">
-            <h3 className="font-medium text-foreground">API Access Details</h3>
+          <div className="mt-4 sm:mt-6 space-y-3 sm:space-y-4 rounded-lg bg-muted/50 p-3 sm:p-4">
+            <h3 className="text-sm sm:text-base font-medium text-foreground">API Access Details</h3>
             
             <div>
-              <Label>API Endpoint URL</Label>
-              <div className="mt-1 flex gap-2">
+              <Label className="text-xs sm:text-sm">API Endpoint URL</Label>
+              <div className="mt-1 flex flex-col sm:flex-row gap-2">
                 <Input
                   value={`${API_BASE_URL}/pos-patrol-api`}
                   readOnly
-                  className="font-mono text-sm bg-background"
+                  className="font-mono text-xs sm:text-sm bg-background flex-1"
                 />
                 <Button
                   variant="outline"
-                  size="icon"
+                  size="sm"
+                  className="w-full sm:w-auto gap-2"
                   onClick={() => {
                     navigator.clipboard.writeText(`${API_BASE_URL}/pos-patrol-api`);
                     toast.success('API URL copied to clipboard');
                   }}
                 >
                   <Copy className="h-4 w-4" />
+                  <span className="sm:hidden">Copy URL</span>
                 </Button>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -258,30 +260,36 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <Label>API Key / Token</Label>
-              <div className="mt-1 flex gap-2">
+              <Label className="text-xs sm:text-sm">API Key / Token</Label>
+              <div className="mt-1 flex flex-col sm:flex-row gap-2">
                 <Input
                   value={showApiKey ? apiKey : '••••••••••••••••'}
                   readOnly
-                  className="font-mono text-sm bg-background"
+                  className="font-mono text-xs sm:text-sm bg-background flex-1"
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    navigator.clipboard.writeText(apiKey);
-                    toast.success('API key copied to clipboard');
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 sm:flex-none gap-2"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="sm:hidden">{showApiKey ? 'Hide' : 'Show'}</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 sm:flex-none gap-2"
+                    onClick={() => {
+                      navigator.clipboard.writeText(apiKey);
+                      toast.success('API key copied to clipboard');
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                    <span className="sm:hidden">Copy</span>
+                  </Button>
+                </div>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 Include in API requests as Authorization header
@@ -289,18 +297,20 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <Label>Example API Request</Label>
-              <div className="mt-1 rounded-md bg-background p-3 font-mono text-xs overflow-x-auto">
-                <pre className="text-muted-foreground">
+              <Label className="text-xs sm:text-sm">Example API Request</Label>
+              <div className="mt-1 rounded-md bg-background p-2 sm:p-3 font-mono text-[10px] sm:text-xs overflow-x-auto">
+                <pre className="text-muted-foreground whitespace-pre-wrap break-all sm:whitespace-pre sm:break-normal">
 {`GET ${API_BASE_URL}/pos-patrol-api?from_date=2024-12-01&to_date=2024-12-31`}
                 </pre>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Bank Details */}
         <div className="stat-card">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Bank Details (for invoices)</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <h2 className="mb-4 text-base sm:text-lg font-semibold text-foreground">Bank Details (for invoices)</h2>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="bankName">Bank Name</Label>
               <Input
@@ -342,7 +352,7 @@ export default function SettingsPage() {
 
         {/* Terms */}
         <div className="stat-card">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Terms & Conditions</h2>
+          <h2 className="mb-4 text-base sm:text-lg font-semibold text-foreground">Terms & Conditions</h2>
           <Textarea
             value={settings.termsAndConditions}
             onChange={(e) => setSettings({ ...settings, termsAndConditions: e.target.value })}
@@ -351,7 +361,7 @@ export default function SettingsPage() {
           />
         </div>
 
-        <Button onClick={handleSave} disabled={saving} className="w-full gap-2">
+        <Button onClick={handleSave} disabled={saving} className="w-full gap-2 mb-4">
           <Save className="h-4 w-4" />
           {saving ? 'Saving...' : 'Save Settings'}
         </Button>
