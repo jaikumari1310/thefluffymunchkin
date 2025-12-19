@@ -4,6 +4,7 @@ import {
   User,
   AuthSession,
   authenticateUser,
+  authenticateGoogleUser,
   validateSession,
   deleteSessionByToken,
   initializeAuthDB,
@@ -155,8 +156,8 @@ const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> 
   try {
     const { email, name } = await signInWithGoogle();
 
-    // Reuse auth-db to create session
-    const result = await authenticateUser(email, '__GOOGLE__');
+    // Use dedicated Google auth function
+    const result = await authenticateGoogleUser(email, name);
 
     if (!result) {
       return { success: false, error: 'Google authentication failed' };

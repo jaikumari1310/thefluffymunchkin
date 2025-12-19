@@ -311,3 +311,35 @@ export async function authenticateUser(username: string, password: string): Prom
   const session = await createSession(user.id);
   return { user, session };
 }
+
+// Google Authentication helper
+export async function authenticateGoogleUser(email: string, name: string): Promise<{ user: User; session: AuthSession } | null> {
+  // Check if user already exists with this email
+  let user = await getUserByEmail(email);
+  
+  if (user) {
+    // Existing user - verify they're active
+    if (!user.isActive) {
+      return null;
+    }
+  } else {
+    // New user - check if they're in the approved list
+    const approvedUser = await isGoogleUserApproved(email);
+    if (!approvedUser) {
+      return null;
+    }
+    
+    // Create the user
+    user = await createUser({
+      username: email,
+      password: generateToken(), // Random password since Google handles auth
+      displayName: name,
+      email: email,
+      role: approvedUser.role,
+      authProvider: 'google',
+    });
+  }
+
+  const session = await createSession(user.id);
+  return { user, session };
+}
