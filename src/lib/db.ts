@@ -8,6 +8,8 @@ export interface Customer {
   gstin?: string;
   address?: string;
   email?: string;
+  stateCode?: string;
+  stateName?: string;
   balance: number;
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +53,8 @@ export interface Invoice {
   customerPhone?: string;
   customerGstin?: string;
   customerAddress?: string;
+  customerStateCode?: string;
+  customerStateName?: string;
   items: InvoiceItem[];
   subtotal: number;
   totalCgst: number;
@@ -69,6 +73,15 @@ export interface Invoice {
   dueDate?: Date;
   createdAt: Date;
   updatedAt: Date;
+  // POS PATROL fields
+  receiptTime?: string; // HHMMSS format
+  businessDate?: Date;
+  transactionStatus: 'SALES' | 'RETURN';
+  returnAmount?: number;
+  originalInvoiceId?: string; // For return invoices
+  locationCode?: string;
+  terminalId?: string;
+  shiftNo?: string;
 }
 
 export interface Payment {
@@ -98,6 +111,10 @@ export interface Settings {
   bankIfsc?: string;
   upiId?: string;
   termsAndConditions?: string;
+  // POS PATROL / Kiosk configuration
+  locationCode: string; // Mall-assigned branch/store ID
+  terminalId: string; // POS terminal ID
+  currentShift: string; // Current shift number
 }
 
 interface BillingDB extends DBSchema {
@@ -296,6 +313,76 @@ export async function updateInvoice(id: string, updates: Partial<Invoice>): Prom
   }
 }
 
+// Create a return invoice linked to the original sale
+export async function createReturnInvoice(
+  originalInvoice: Invoice,
+  returnItems: InvoiceItem[],
+  settings: Settings
+): Promise<Invoice> {
+  const db = await getDB();
+  const now = new Date();
+  const receiptTime = now.toTimeString().slice(0, 8).replace(/:/g, '');
+  
+  // Calculate return totals
+  const subtotal = returnItems.reduce((sum, item) => sum + item.amount, 0);
+  const totalCgst = returnItems.reduce((sum, item) => sum + item.cgst, 0);
+  const totalSgst = returnItems.reduce((sum, item) => sum + item.sgst, 0);
+  const totalIgst = returnItems.reduce((sum, item) => sum + item.igst, 0);
+  const totalGst = totalCgst + totalSgst + totalIgst;
+  const grandTotal = subtotal + totalGst;
+  
+  const invoiceNumber = `${settings.invoicePrefix}-${String(settings.nextInvoiceNumber).padStart(5, '0')}-R`;
+  
+  const returnInvoice: Invoice = {
+    id: generateId(),
+    invoiceNumber,
+    customerId: originalInvoice.customerId,
+    customerName: originalInvoice.customerName,
+    customerPhone: originalInvoice.customerPhone,
+    customerGstin: originalInvoice.customerGstin,
+    customerAddress: originalInvoice.customerAddress,
+    customerStateCode: originalInvoice.customerStateCode,
+    customerStateName: originalInvoice.customerStateName,
+    items: returnItems,
+    subtotal,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+    totalGst,
+    discount: 0,
+    roundOff: 0,
+    grandTotal,
+    paidAmount: grandTotal,
+    dueAmount: 0,
+    paymentMode: originalInvoice.paymentMode,
+    status: 'paid',
+    invoiceDate: now,
+    createdAt: now,
+    updatedAt: now,
+    // POS PATROL fields
+    receiptTime,
+    businessDate: now,
+    transactionStatus: 'RETURN',
+    returnAmount: grandTotal,
+    originalInvoiceId: originalInvoice.id,
+    locationCode: settings.locationCode || '01',
+    terminalId: settings.terminalId || '01',
+    shiftNo: settings.currentShift || '01',
+  };
+  
+  await db.add('invoices', returnInvoice);
+  
+  // Restore stock for returned items
+  for (const item of returnItems) {
+    await updateProductStock(item.productId, item.quantity);
+  }
+  
+  // Update next invoice number
+  await updateSettings({ nextInvoiceNumber: settings.nextInvoiceNumber + 1 });
+  
+  return returnInvoice;
+}
+
 // Payment operations
 export async function getPayments(invoiceId?: string): Promise<Payment[]> {
   const db = await getDB();
@@ -350,6 +437,9 @@ export async function updateSettings(updates: Partial<Settings>): Promise<void> 
       nextInvoiceNumber: 1,
       stateCode: '27',
       stateName: 'Maharashtra',
+      locationCode: '01',
+      terminalId: '01',
+      currentShift: '01',
       ...updates,
     } as Settings);
   }
@@ -369,6 +459,9 @@ export async function initializeSettings(): Promise<Settings> {
       nextInvoiceNumber: 1,
       stateCode: '27',
       stateName: 'Maharashtra',
+      locationCode: '01',
+      terminalId: '01',
+      currentShift: '01',
     };
     await db.add('settings', settings);
   }

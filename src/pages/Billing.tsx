@@ -177,6 +177,9 @@ export default function Billing() {
     try {
       const invoiceNumber = `${settings.invoicePrefix}-${String(settings.nextInvoiceNumber).padStart(5, '0')}`;
       
+      const now = new Date();
+      const receiptTime = now.toTimeString().slice(0, 8).replace(/:/g, ''); // HHMMSS format
+      
       const invoice = await addInvoice({
         invoiceNumber,
         customerId: selectedCustomer?.id,
@@ -184,6 +187,8 @@ export default function Billing() {
         customerPhone: selectedCustomer?.phone,
         customerGstin: selectedCustomer?.gstin,
         customerAddress: selectedCustomer?.address,
+        customerStateCode: selectedCustomer?.stateCode,
+        customerStateName: selectedCustomer?.stateName,
         items: cartItems.map(({ id, ...item }) => item),
         subtotal,
         totalCgst,
@@ -197,7 +202,14 @@ export default function Billing() {
         dueAmount: paymentMode === 'credit' ? grandTotal : Math.max(0, grandTotal - (paidAmount || grandTotal)),
         paymentMode,
         status: paymentMode === 'credit' ? 'unpaid' : paidAmount >= grandTotal ? 'paid' : 'partial',
-        invoiceDate: new Date(),
+        invoiceDate: now,
+        // POS PATROL fields
+        receiptTime,
+        businessDate: now,
+        transactionStatus: 'SALES',
+        locationCode: settings.locationCode || '01',
+        terminalId: settings.terminalId || '01',
+        shiftNo: settings.currentShift || '01',
       });
 
       toast.success(`Invoice ${invoiceNumber} created successfully!`);

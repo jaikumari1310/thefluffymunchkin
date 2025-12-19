@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Eye, Printer, Send, FileText } from 'lucide-react';
+import { Search, Eye, Printer, Send, FileText, RotateCcw, ArrowLeftRight } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { getInvoices, getSettings, Invoice, Settings, formatCurrency } from '@/lib/db';
+import { getInvoices, getSettings, Invoice, Settings, formatCurrency, createReturnInvoice, InvoiceItem } from '@/lib/db';
 import { format } from 'date-fns';
 
 export default function Invoices() {
@@ -20,6 +25,11 @@ export default function Invoices() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
+  const [selectedReturnItems, setSelectedReturnItems] = useState<Record<number, boolean>>({});
+  const [returnQuantities, setReturnQuantities] = useState<Record<number, number>>({});
+  const [processingReturn, setProcessingReturn] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -85,6 +95,60 @@ export default function Invoices() {
     window.open(url, '_blank');
   }
 
+  function openReturnDialog(invoice: Invoice) {
+    // Only allow returns for SALES invoices
+    if (invoice.transactionStatus === 'RETURN') {
+      toast.error('Cannot create return for a return invoice');
+      return;
+    }
+    setReturnInvoice(invoice);
+    setSelectedReturnItems({});
+    setReturnQuantities(
+      invoice.items.reduce((acc, _, idx) => ({ ...acc, [idx]: 1 }), {})
+    );
+    setReturnDialogOpen(true);
+  }
+
+  async function handleProcessReturn() {
+    if (!returnInvoice || !settings) return;
+    
+    const itemsToReturn: InvoiceItem[] = [];
+    
+    returnInvoice.items.forEach((item, idx) => {
+      if (selectedReturnItems[idx]) {
+        const qty = Math.min(returnQuantities[idx] || 1, item.quantity);
+        const ratio = qty / item.quantity;
+        itemsToReturn.push({
+          ...item,
+          quantity: qty,
+          amount: item.amount * ratio,
+          cgst: item.cgst * ratio,
+          sgst: item.sgst * ratio,
+          igst: item.igst * ratio,
+        });
+      }
+    });
+    
+    if (itemsToReturn.length === 0) {
+      toast.error('Please select at least one item to return');
+      return;
+    }
+    
+    setProcessingReturn(true);
+    try {
+      const newReturnInvoice = await createReturnInvoice(returnInvoice, itemsToReturn, settings);
+      toast.success(`Return invoice ${newReturnInvoice.invoiceNumber} created`);
+      setReturnDialogOpen(false);
+      setReturnInvoice(null);
+      loadData();
+    } catch (error) {
+      console.error('Error creating return:', error);
+      toast.error('Failed to create return invoice');
+    } finally {
+      setProcessingReturn(false);
+    }
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -131,11 +195,12 @@ export default function Invoices() {
             <thead>
               <tr>
                 <th>Invoice #</th>
+                <th>Type</th>
                 <th>Date</th>
                 <th>Customer</th>
                 <th>Amount</th>
                 <th>Status</th>
-                <th className="w-32">Actions</th>
+                <th className="w-40">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -144,12 +209,24 @@ export default function Invoices() {
                   <td className="font-medium font-mono-numbers">
                     {invoice.invoiceNumber}
                   </td>
+                  <td>
+                    <Badge 
+                      variant={invoice.transactionStatus === 'RETURN' ? 'destructive' : 'secondary'}
+                      className="text-xs"
+                    >
+                      {invoice.transactionStatus === 'RETURN' ? (
+                        <><RotateCcw className="h-3 w-3 mr-1" /> Return</>
+                      ) : (
+                        'Sale'
+                      )}
+                    </Badge>
+                  </td>
                   <td className="text-muted-foreground">
                     {format(new Date(invoice.invoiceDate), 'dd MMM yyyy')}
                   </td>
                   <td>{invoice.customerName}</td>
                   <td className="font-mono-numbers font-medium">
-                    {formatCurrency(invoice.grandTotal)}
+                    {invoice.transactionStatus === 'RETURN' ? '-' : ''}{formatCurrency(invoice.grandTotal)}
                   </td>
                   <td>
                     <span
@@ -171,6 +248,7 @@ export default function Invoices() {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => setSelectedInvoice(invoice)}
+                        title="View"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -182,6 +260,7 @@ export default function Invoices() {
                           setSelectedInvoice(invoice);
                           setTimeout(() => handlePrint(invoice), 100);
                         }}
+                        title="Print"
                       >
                         <Printer className="h-4 w-4" />
                       </Button>
@@ -190,9 +269,21 @@ export default function Invoices() {
                         size="icon"
                         className="h-8 w-8 text-success hover:text-success"
                         onClick={() => handleWhatsApp(invoice)}
+                        title="Share via WhatsApp"
                       >
                         <Send className="h-4 w-4" />
                       </Button>
+                      {invoice.transactionStatus !== 'RETURN' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => openReturnDialog(invoice)}
+                          title="Create Return"
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -370,6 +461,104 @@ export default function Invoices() {
               Share on WhatsApp
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return Dialog */}
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="h-5 w-5" />
+              Create Return Invoice
+            </DialogTitle>
+            <DialogDescription>
+              Select items to return from invoice {returnInvoice?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {returnInvoice && (
+            <div className="space-y-4">
+              <div className="max-h-64 overflow-y-auto space-y-3">
+                {returnInvoice.items.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`p-3 rounded-lg border ${
+                      selectedReturnItems[idx] ? 'border-primary bg-primary/5' : 'border-border'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id={`return-item-${idx}`}
+                        checked={selectedReturnItems[idx] || false}
+                        onCheckedChange={(checked) => 
+                          setSelectedReturnItems({ ...selectedReturnItems, [idx]: !!checked })
+                        }
+                      />
+                      <div className="flex-1">
+                        <Label 
+                          htmlFor={`return-item-${idx}`} 
+                          className="font-medium cursor-pointer"
+                        >
+                          {item.productName}
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(item.rate)} × {item.quantity} {item.unit} = {formatCurrency(item.amount + item.cgst + item.sgst + item.igst)}
+                        </p>
+                        {selectedReturnItems[idx] && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Label className="text-xs">Return Qty:</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={item.quantity}
+                              value={returnQuantities[idx] || 1}
+                              onChange={(e) => setReturnQuantities({
+                                ...returnQuantities,
+                                [idx]: Math.min(Math.max(1, parseInt(e.target.value) || 1), item.quantity)
+                              })}
+                              className="w-20 h-8"
+                            />
+                            <span className="text-xs text-muted-foreground">of {item.quantity}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Return Summary */}
+              {Object.values(selectedReturnItems).some(v => v) && (
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-sm font-medium">Return Summary</p>
+                  <p className="text-lg font-bold font-mono-numbers text-destructive">
+                    -{formatCurrency(
+                      returnInvoice.items.reduce((sum, item, idx) => {
+                        if (!selectedReturnItems[idx]) return sum;
+                        const qty = Math.min(returnQuantities[idx] || 1, item.quantity);
+                        const ratio = qty / item.quantity;
+                        return sum + (item.amount + item.cgst + item.sgst + item.igst) * ratio;
+                      }, 0)
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleProcessReturn}
+              disabled={processingReturn || !Object.values(selectedReturnItems).some(v => v)}
+            >
+              {processingReturn ? 'Processing...' : 'Create Return'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppLayout>

@@ -23,6 +23,9 @@ export default function SettingsPage() {
     bankIfsc: '',
     upiId: '',
     termsAndConditions: '',
+    locationCode: '01',
+    terminalId: '01',
+    currentShift: '01',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -169,7 +172,54 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Bank Details */}
+        {/* Kiosk Configuration (POS PATROL) */}
+        <div className="stat-card">
+          <h2 className="mb-4 text-lg font-semibold text-foreground">Kiosk Configuration</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Configure POS PATROL integration settings for mall reporting
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="locationCode">Location Code</Label>
+              <Input
+                id="locationCode"
+                value={settings.locationCode}
+                onChange={(e) => setSettings({ ...settings, locationCode: e.target.value })}
+                placeholder="01"
+                maxLength={10}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Mall-assigned branch/store ID
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="terminalId">Terminal ID</Label>
+              <Input
+                id="terminalId"
+                value={settings.terminalId}
+                onChange={(e) => setSettings({ ...settings, terminalId: e.target.value })}
+                placeholder="01"
+                maxLength={10}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                POS terminal identifier
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="currentShift">Current Shift</Label>
+              <Input
+                id="currentShift"
+                value={settings.currentShift}
+                onChange={(e) => setSettings({ ...settings, currentShift: e.target.value })}
+                placeholder="01"
+                maxLength={2}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Active shift number
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="stat-card">
           <h2 className="mb-4 text-lg font-semibold text-foreground">Bank Details (for invoices)</h2>
           <div className="grid gap-4 sm:grid-cols-2">
