@@ -102,8 +102,8 @@ const handleGoogleLogin = async () => {
             <IndianRupee className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-foreground">GST Billing</h1>
-            <p className="text-xs text-muted-foreground">by BillEasy</p>
+            <h1 className="text-lg font-bold text-foreground">The Fluffy Munchkin</h1>
+            <p className="text-xs text-muted-foreground">Billing System</p>
           </div>
         </div>
       </header>
