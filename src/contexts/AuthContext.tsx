@@ -1,3 +1,4 @@
+import { signInWithGoogle } from '@/lib/google-auth';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   User,
@@ -14,6 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -149,6 +151,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { email, name } = await signInWithGoogle();
+
+    // Reuse auth-db to create session
+    const result = await authenticateUser(email, '__GOOGLE__');
+
+    if (!result) {
+      return { success: false, error: 'Google authentication failed' };
+    }
+
+    setUser(result.user);
+    setSession(result.session);
+    storeToken(result.session.token);
+    setLastActivity(Date.now());
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Google login error:', error);
+    return { success: false, error: error.message || 'Google login failed' };
+  }
+};
+
   const logout = async () => {
     const token = getStoredToken();
     if (token) {
@@ -171,6 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user && !!session,
         login,
+		loginWithGoogle,
         logout,
         refreshSession,
       }}
