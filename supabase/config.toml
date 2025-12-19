@@ -1,1 +1,4 @@
 project_id = "likthkgwdrvfsrthgzbw"
+
+[functions.pos-patrol-api]
+verify_jwt = false
