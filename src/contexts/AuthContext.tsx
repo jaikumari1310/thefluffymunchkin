@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 const loginWithGoogle = async () => {
   try {
-    const googleUser = await signInWithGooglePopup(); // your existing call
+    const googleUser = await signInWithGoogle(); // your existing call
 
     const email = googleUser?.email?.toLowerCase();
 
@@ -179,6 +179,7 @@ const loginWithGoogle = async () => {
     if (!data) {
       throw new Error('This Google account is not approved');
     }
+								
 
     // ✅ ALLOWED
     return { success: true, role: data.role };
