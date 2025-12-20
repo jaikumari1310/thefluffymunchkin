@@ -149,8 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (error) {
-	  console.log('Google email:', email);
-      console.error('Login error:', error);
+	  console.error('Login error:', error);
       return { success: false, error: 'An error occurred during login' };
     }
   };
@@ -186,6 +185,7 @@ const loginWithGoogle = async () => {
     return { success: true, role: data.role };
 
   } catch (err: any) {
+    console.log('Google email:', email);
     console.error('Google login error:', err);
     return { success: false, error: err.message };
   }
