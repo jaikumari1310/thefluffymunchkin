@@ -149,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (error) {
+	  console.log('Google email:', email);
       console.error('Login error:', error);
       return { success: false, error: 'An error occurred during login' };
     }
