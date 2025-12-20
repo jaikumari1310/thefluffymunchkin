@@ -1,5 +1,7 @@
 import { signInWithGoogle } from '@/lib/google-auth';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { isGoogleUserApproved } from '@/lib/approved-users';
+
 import {
   User,
   AuthSession,
@@ -156,7 +158,12 @@ const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> 
   try {
     const { email, name } = await signInWithGoogle();
 
-    // Use dedicated Google auth function
+    // 🔒 STEP 3: Whitelist check
+    const approved = await isGoogleUserApproved(email);
+    if (!approved) {
+      throw new Error('This Google account is not approved');
+    }
+
     const result = await authenticateGoogleUser(email, name);
 
     if (!result) {
