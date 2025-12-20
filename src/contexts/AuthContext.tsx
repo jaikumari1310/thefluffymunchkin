@@ -154,31 +154,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+const loginWithGoogle = async () => {
   try {
-    const { email, name } = await signInWithGoogle();
+    const googleUser = await signInWithGooglePopup(); // your existing call
 
-    // 🔒 STEP 3: Whitelist check
-    const approved = await isGoogleUserApproved(email);
-    if (!approved) {
+    const email = googleUser?.email?.toLowerCase();
+
+    if (!email) {
+      throw new Error('Unable to read Google account email');
+    }
+
+    // ✅ STEP 3: CHECK WHITELIST
+    const { data, error } = await supabase
+      .from('approved_google_users')
+      .select('email, role')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Whitelist lookup error:', error);
+      throw new Error('Access verification failed');
+    }
+
+    if (!data) {
       throw new Error('This Google account is not approved');
     }
 
-    const result = await authenticateGoogleUser(email, name);
+    // ✅ ALLOWED
+    return { success: true, role: data.role };
 
-    if (!result) {
-      return { success: false, error: 'Google authentication failed' };
-    }
-
-    setUser(result.user);
-    setSession(result.session);
-    storeToken(result.session.token);
-    setLastActivity(Date.now());
-
-    return { success: true };
-  } catch (error: any) {
-    console.error('Google login error:', error);
-    return { success: false, error: error.message || 'Google login failed' };
+  } catch (err: any) {
+    console.error('Google login error:', err);
+    return { success: false, error: err.message };
   }
 };
 
