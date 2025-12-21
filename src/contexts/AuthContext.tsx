@@ -94,56 +94,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------------- Google OAuth ---------------- */
 
-  const loginWithGoogle = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
+const loginWithGoogle = async () => {
+  try {
+    // 1️⃣ Trigger OAuth redirect
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // OAuth redirects — no further code runs here
-      return { success: true };
+    return { success: true };
+  } catch (err: any) {
+    console.error('Google login start failed:', err);
+    return { success: false, error: err.message };
+  }
+};
 
-    } catch (err: any) {
-      console.error('Google login error:', err);
-      return { success: false, error: err.message };
-    }
-  };
 
   /* ---------------- Supabase session listener ---------------- */
 
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event !== 'SIGNED_IN' || !session?.user?.email) return;
+useEffect(() => {
+  const handleOAuthSession = async () => {
+    const { data, error } = await supabase.auth.getSession();
 
-        const email = session.user.email.toLowerCase();
-        console.log('Google email:', email);
+    if (error || !data.session) return;
 
-        const { data, error } = await supabase
-          .from('approved_google_users')
-          .select('email, role')
-          .eq('email', email)
-          .maybeSingle();
+    const email = data.session.user.email?.toLowerCase();
+    if (!email) return;
 
-        if (error || !data) {
-          await supabase.auth.signOut();
-          alert('This Google account is not approved');
-          return;
-        }
+    // ✅ WHITELIST CHECK (Step 3 — correct place)
+    const { data: approved } = await supabase
+      .from('approved_google_users')
+      .select('email, role')
+      .eq('email', email)
+      .maybeSingle();
 
-        console.log('Google user approved:', data.email);
-      }
-    );
+    if (!approved) {
+      await supabase.auth.signOut();
+      throw new Error('This Google account is not approved');
+    }
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
+    // ✅ Create / sync local user
+    const result = await authenticateGoogleUser(email, approved.role);
+
+    setUser(result.user);
+    setSession(result.session);
+    storeToken(result.session.token);
+  };
+
+  handleOAuthSession();
+}, []);
+
 
   /* ---------------- Username / Password login ---------------- */
 
