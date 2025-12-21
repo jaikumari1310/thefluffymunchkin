@@ -215,8 +215,8 @@ export default function UserManagement() {
       setNewGoogleEmail('');
       setNewGoogleRole('staff');
       loadData();
-    } catch (error) {
-      toast.error('Failed to add approved Google user');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add approved Google user');
     } finally {
       setIsSubmitting(false);
     }
