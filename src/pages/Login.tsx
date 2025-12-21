@@ -6,13 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
   const navigate = useNavigate();
   const { login, loginWithGoogle, isLoading: authLoading } = useAuth();  
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,8 +22,8 @@ export default function Login() {
     e.preventDefault();
     setError('');
     
-    if (!email.trim()) {
-      setError('Email is required');
+    if (!username.trim()) {
+      setError('Username is required');
       return;
     }
     
@@ -40,7 +40,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const result = await login(email.trim(), password);
+      const result = await login(username.trim(), password);
       
       if (result.success) {
         toast.success('Login successful!');
@@ -128,21 +128,21 @@ const handleGoogleLogin = async () => {
                 </div>
               )}
 
-              {/* Email */}
+              {/* Username */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email
+                <Label htmlFor="username" className="text-sm font-medium">
+                  Username
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="Enter your username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 h-11"
-                    autoComplete="email"
+                    autoComplete="username"
                     autoFocus
                     disabled={isLoading}
                   />

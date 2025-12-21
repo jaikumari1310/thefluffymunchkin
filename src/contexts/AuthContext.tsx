@@ -8,12 +8,17 @@ import React, {
 
 import { supabase } from '@/integrations/supabase/client';
 import { signInWithGoogle } from '@/lib/google-auth';
+import {
+  authenticateUser,
+  validateSession,
+  deleteSessionByToken,
+} from '@/lib/auth-db';
 
 interface AuthContextType {
   user: any | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
@@ -24,84 +29,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 🔹 Restore session on reload
+  const handleSession = useCallback(async () => {
+    setIsLoading(true);
+
+    const localToken = localStorage.getItem('auth_token');
+    const { data: { session: supabaseSession } } = await supabase.auth.getSession();
+
+    if (localToken) {
+      const { user } = await validateSession(localToken);
+      if (user) {
+        setUser(user);
+      } else {
+        localStorage.removeItem('auth_token');
+      }
+    } else if (supabaseSession) {
+      setUser(supabaseSession.user);
+    }
+
+    setIsLoading(false);
+  }, []);
+
   useEffect(() => {
-    console.log('[Auth] Initializing auth context');
+    handleSession();
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      console.log('[Auth] getSession:', { data, error });
-
-      if (data?.session?.user) {
-        console.log('[Auth] Session user:', data.session.user.email);
-        setUser(data.session.user);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        setUser(session?.user ?? null);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
       }
-
-      setIsLoading(false);
     });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('[Auth] Auth state change:', event, session);
-
-        if (session?.user) {
-          setUser(session.user);
-        } else {
-          setUser(null);
-        }
-      }
-    );
 
     return () => {
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [handleSession]);
 
-  // 🔹 Email/password login
-  const login = useCallback(async (email, password) => {
-    console.log('[Auth] login called with email:', email);
-    
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      console.error('[Auth] Supabase login failed:', error.message);
-      return { success: false, error: error.message };
-    }
-
-    if (data.user) {
-      console.log('[Auth] Supabase login successful:', data.user.email);
-      // The onAuthStateChange listener will handle setting the user state
+  const login = useCallback(async (username, password) => {
+    const result = await authenticateUser(username, password);
+    if (result) {
+      localStorage.setItem('auth_token', result.session.token);
+      setUser(result.user);
       return { success: true };
     }
-
-    return { success: false, error: 'Login failed: Unknown error' };
+    return { success: false, error: 'Invalid username or password' };
   }, []);
 
-
-  // 🔹 Google login
   const loginWithGoogle = useCallback(async () => {
-    console.log('[Auth] loginWithGoogle called');
-
     try {
       await signInWithGoogle();
-      console.log('[Auth] Redirecting to Google...');
       return { success: true };
     } catch (err: any) {
-      console.error('[Auth] Google login failed:', err);
       return { success: false, error: err.message };
     }
   }, []);
 
-  // 🔹 Logout
-  const logout = async () => {
-    console.log('[Auth] Logging out');
-
+  const logout = useCallback(async () => {
+    const localToken = localStorage.getItem('auth_token');
+    if (localToken) {
+      await deleteSessionByToken(localToken);
+      localStorage.removeItem('auth_token');
+    }
+    
     await supabase.auth.signOut();
     setUser(null);
     window.location.href = '/login';
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
