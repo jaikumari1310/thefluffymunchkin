@@ -1,4 +1,4 @@
-// Authentication Database for offline-first auth
+'''// Authentication Database for offline-first auth
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
 export type UserRole = 'admin' | 'staff';
@@ -277,18 +277,19 @@ export async function deleteSessionByToken(token: string): Promise<void> {
   }
 }
 
-// Initialize default admin user if no users exist
+// Initialize default admin user if it doesn't exist
 export async function initializeAuthDB(): Promise<void> {
   const db = await getAuthDB();
-  const users = await db.getAll('users');
-  
-  if (users.length === 0) {
-    // Create default admin user
+  const adminUser = await db.getFromIndex('users', 'by-username', 'admin');
+
+  if (!adminUser) {
+    // Create default admin user if it does not exist
     await createUser({
       username: 'admin',
       password: 'admin123', // Default password - should be changed
       displayName: 'Administrator',
       role: 'admin',
+      authProvider: 'local',
     });
     
     console.log('Default admin user created. Username: admin, Password: admin123');
@@ -343,3 +344,4 @@ export async function authenticateGoogleUser(email: string, name: string): Promi
   const session = await createSession(user.id);
   return { user, session };
 }
+''
