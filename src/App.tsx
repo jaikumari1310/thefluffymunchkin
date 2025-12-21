@@ -29,7 +29,8 @@ const App = () => (
           <Routes>
             {/* Public route */}
             <Route path="/login" element={<Login />} />
-            
+            <Route path="/auth/callback" element={<AuthCallback />} />
+			
             {/* Protected routes */}
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
@@ -38,7 +39,7 @@ const App = () => (
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
+            
             {/* Admin only routes */}
             <Route path="/users" element={<ProtectedRoute requiredRole="admin"><UserManagement /></ProtectedRoute>} />
             
