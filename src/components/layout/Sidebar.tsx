@@ -10,7 +10,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  IndianRupee,
   UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -44,9 +43,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-            <IndianRupee className="h-5 w-5 text-sidebar-primary-foreground" />
-          </div>
+          <img src="/fluffymunchkin-logo.png" alt="The Fluffy Munchkin logo" className="h-9 w-9" />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-sidebar-foreground">The Fluffy Munchkin</span>
