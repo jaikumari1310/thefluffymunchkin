@@ -1,27 +1,31 @@
-import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '@/integrations/supabase/client'
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   useEffect(() => {
-    console.log('[AuthCallback] Page loaded');
+    const handleCallback = async () => {
+      console.log('[AuthCallback] Page loaded')
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      console.log('[AuthCallback] getSession result:', { data, error });
+      // Supabase already saved the session at this point
+      const { data, error } = await supabase.auth.getSession()
 
-      if (error || !data.session) {
-        console.error('[AuthCallback] No session found');
-        navigate('/login');
-        return;
-      }
+      console.log('[AuthCallback] Session data:', data)
+      console.log('[AuthCallback] Session error:', error)
 
-      console.log('[AuthCallback] User authenticated:', data.session.user.email);
-      navigate('/');
-    });
-  }, [navigate]);
+      // Always redirect user after login
+      navigate('/', { replace: true })
+    }
 
-  return <div>Signing you in…</div>;
+    handleCallback()
+  }, [navigate])
+
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h2>Signing you in…</h2>
+      <p>Please wait</p>
+    </div>
+  )
 }
-

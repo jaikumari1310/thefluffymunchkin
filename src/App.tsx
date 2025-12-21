@@ -15,6 +15,9 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
+import AuthCallback from '@/pages/AuthCallback'
+
+<Route path="/auth/callback" element={<AuthCallback />} />
 
 const queryClient = new QueryClient();
 
