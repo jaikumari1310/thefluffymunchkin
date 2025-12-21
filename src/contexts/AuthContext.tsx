@@ -13,6 +13,7 @@ interface AuthContextType {
   user: any | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
@@ -55,6 +56,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // 🔹 Email/password login
+  const login = useCallback(async (email, password) => {
+    console.log('[Auth] login called with email:', email);
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error('[Auth] Supabase login failed:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    if (data.user) {
+      console.log('[Auth] Supabase login successful:', data.user.email);
+      // The onAuthStateChange listener will handle setting the user state
+      return { success: true };
+    }
+
+    return { success: false, error: 'Login failed: Unknown error' };
+  }, []);
+
+
   // 🔹 Google login
   const loginWithGoogle = useCallback(async () => {
     console.log('[Auth] loginWithGoogle called');
@@ -84,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        login,
         loginWithGoogle,
         logout,
       }}
