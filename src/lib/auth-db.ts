@@ -1,4 +1,4 @@
-'''// Authentication Database for offline-first auth
+// Authentication Database for offline-first auth
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
 export type UserRole = 'admin' | 'staff';
@@ -344,4 +344,3 @@ export async function authenticateGoogleUser(email: string, name: string): Promi
   const session = await createSession(user.id);
   return { user, session };
 }
-''
