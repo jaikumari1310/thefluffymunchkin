@@ -1,32 +1,65 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../integrations/supabase/types';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY!;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export interface ApprovedGoogleUser {
-  email: string;
-  role: 'admin' | 'staff';
-  created_at: string;
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase URL and Anon Key must be provided.');
 }
 
-export const getApprovedGoogleUsers = async (): Promise<ApprovedGoogleUser[]> => {
-  const { data, error } = await supabase.from('approved_google_users').select('*');
-  if (error) throw error;
-  return data;
-};
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-export const addApprovedGoogleUser = async (email: string, role: 'admin' | 'staff'): Promise<ApprovedGoogleUser> => {
+export type ApprovedGoogleUser = Database['public']['Tables']['approved_google_users']['Row'];
+export type UserRole = Database['public']['Enums']['user_role'];
+
+// Function to get all approved Google users
+export async function getApprovedGoogleUsers(): Promise<ApprovedGoogleUser[]> {
   const { data, error } = await supabase
     .from('approved_google_users')
-    .insert([{ email: email.toLowerCase(), role }])
-    .select();
-  if (error) throw error;
-  return data[0];
-};
+    .select('*')
+    .order('email', { ascending: true });
 
-export const removeApprovedGoogleUser = async (email: string): Promise<void> => {
-  const { error } = await supabase.from('approved_google_users').delete().eq('email', email.toLowerCase());
-  if (error) throw error;
-};
+  if (error) {
+    console.error('Error fetching approved Google users:', error);
+    throw new Error('Could not fetch approved Google users.');
+  }
+
+  return data || [];
+}
+
+// Function to add an approved Google user
+export async function addApprovedGoogleUser(email: string, role: UserRole): Promise<ApprovedGoogleUser> {
+    const { data, error } = await supabase
+      .from('approved_google_users')
+      .insert([{ email, role }])
+      .select()
+      .single();
+  
+    if (error) {
+      console.error('Error adding approved Google user:', error);
+      if (error.code === '23505') { // unique_violation
+          throw new Error(`User with email ${email} already exists.`);
+      }
+      throw new Error('Could not add the approved Google user.');
+    }
+  
+    return data;
+  }
+
+// Function to remove an approved Google user by email
+export async function removeApprovedGoogleUser(email:string): Promise<void> {
+  const { error, count } = await supabase
+    .from('approved_google_users')
+    .delete()
+    .eq('email', email);
+
+  if (error) {
+    console.error('Error removing approved Google user:', error);
+    throw new Error('Could not remove the approved Google user.');
+  }
+
+  if (count === 0) {
+      console.warn(`Attempted to remove non-existent user: ${email}`);
+  }
+}

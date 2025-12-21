@@ -31,17 +31,19 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import {
   User as UserType,
-  UserRole,
-  ApprovedGoogleUser,
   getUsers,
   createUser,
   updateUser,
   deleteUser,
   updateUserPassword,
+} from '@/lib/auth-db';
+import {
   getApprovedGoogleUsers,
   addApprovedGoogleUser,
   removeApprovedGoogleUser,
-} from '@/lib/auth-db';
+  ApprovedGoogleUser,
+  UserRole,
+} from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Users,
@@ -96,10 +98,10 @@ export default function UserManagement() {
         getUsers(),
         getApprovedGoogleUsers(),
       ]);
-      setUsers(usersData);
+      setUsers(usersData as any);
       setApprovedGoogleUsers(googleUsersData);
-    } catch (error) {
-      toast.error('Failed to load users');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
@@ -151,8 +153,8 @@ export default function UserManagement() {
       setShowEditUser(false);
       setSelectedUser(null);
       loadData();
-    } catch (error) {
-      toast.error('Failed to update user');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user');
     } finally {
       setIsSubmitting(false);
     }
@@ -173,8 +175,8 @@ export default function UserManagement() {
       setShowChangePassword(false);
       setSelectedUser(null);
       setNewPassword('');
-    } catch (error) {
-      toast.error('Failed to change password');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
     } finally {
       setIsSubmitting(false);
     }
@@ -194,8 +196,8 @@ export default function UserManagement() {
       await deleteUser(user.id);
       toast.success('User deleted successfully');
       loadData();
-    } catch (error) {
-      toast.error('Failed to delete user');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete user');
     }
   };
 
@@ -229,8 +231,8 @@ export default function UserManagement() {
       await removeApprovedGoogleUser(email);
       toast.success('Removed from approved list');
       loadData();
-    } catch (error) {
-      toast.error('Failed to remove approved user');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to remove approved user');
     }
   };
 
@@ -400,7 +402,7 @@ export default function UserManagement() {
                       <div>
                         <p className="font-medium">{gUser.email}</p>
                         <p className="text-xs text-muted-foreground">
-                          Added {format(new Date(gUser.createdAt), 'dd MMM yyyy')}
+                          Added {format(new Date(gUser.created_at), 'dd MMM yyyy')}
                         </p>
                       </div>
                     </div>
