@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { IndianRupee, Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
@@ -98,9 +98,7 @@ const handleGoogleLogin = async () => {
       {/* Header */}
       <header className="p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-            <IndianRupee className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/fluffymunchkin-logo.png" alt="The Fluffy Munchkin logo" className="h-10 w-10" />
           <div>
             <h1 className="text-lg font-bold text-foreground">The Fluffy Munchkin</h1>
             <p className="text-xs text-muted-foreground">Billing System</p>
