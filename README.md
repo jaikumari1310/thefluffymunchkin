@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# Welcome to The Fluffy Munchkin project
 
 ## Project info
 
