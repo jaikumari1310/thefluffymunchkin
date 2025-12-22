@@ -7,7 +7,6 @@ import {
   Search,
   User,
   Save,
-  Printer,
   X,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -28,29 +27,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import {
-  getProducts,
-  getCustomers,
-  getSettings,
-  initializeSettings,
-  addInvoice,
-  Product,
-  Customer,
-  Settings,
-  InvoiceItem,
-  formatCurrency,
-  calculateGST,
-} from '@/lib/db';
+import { supabase } from '@/integrations/supabase/supabaseClient';
+import { type Database } from '@/integrations/supabase/types';
 
-interface CartItem extends InvoiceItem {
-  id: string;
+type Product = Database['public']['Tables']['products']['Row'];
+type Customer = Database['public']['Tables']['customers']['Row'];
+type InvoiceItemInsert = Database['public']['Tables']['invoice_items']['Insert'];
+
+interface CartItem extends InvoiceItemInsert {
+  cart_id: string; 
+}
+
+function formatCurrency(amount: number | null) {
+  if (amount === null) return '-';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
 }
 
 export default function Billing() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,7 +57,7 @@ export default function Billing() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'card' | 'credit'>('cash');
+  const [paymentMode, setPaymentMode] = useState('cash');
   const [discount, setDiscount] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
 
@@ -67,18 +66,21 @@ export default function Billing() {
   }, []);
 
   async function loadData() {
+    setLoading(true);
     try {
-      const [prod, cust, sett] = await Promise.all([
-        getProducts(),
-        getCustomers(),
-        initializeSettings(),
+      const [productsRes, customersRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('customers').select('*'),
       ]);
-      setProducts(prod);
-      setCustomers(cust);
-      setSettings(sett);
-    } catch (error) {
+
+      if (productsRes.error) throw productsRes.error;
+      if (customersRes.error) throw customersRes.error;
+
+      setProducts(productsRes.data || []);
+      setCustomers(customersRes.data || []);
+    } catch (error: any) {
       console.error('Error loading data:', error);
-      toast.error('Failed to load data');
+      toast.error('Failed to load initial data', { description: error.message });
     } finally {
       setLoading(false);
     }
@@ -87,60 +89,57 @@ export default function Billing() {
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const filteredCustomers = customers.filter(
     (c) =>
       c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.phone.includes(customerSearch)
+      (c.phone && c.phone.includes(customerSearch))
   );
 
   function addToCart(product: Product) {
-    const existingItem = cartItems.find((item) => item.productId === product.id);
+    const existingItem = cartItems.find((item) => item.product_id === product.id);
     
     if (existingItem) {
-      updateQuantity(existingItem.id, existingItem.quantity + 1);
+      updateQuantity(existingItem.cart_id, (existingItem.quantity ?? 0) + 1);
     } else {
-      const gst = calculateGST(product.sellingPrice, product.gstPercent);
       const newItem: CartItem = {
-        id: `cart-${Date.now()}`,
-        productId: product.id,
-        productName: product.name,
+        cart_id: `cart-${Date.now()}`,
+        product_id: product.id,
+        product_name: product.name,
         hsn: product.hsn,
         quantity: 1,
         unit: product.unit,
-        rate: product.sellingPrice,
-        gstPercent: product.gstPercent,
-        discount: 0,
-        amount: product.sellingPrice,
-        cgst: gst.cgst,
-        sgst: gst.sgst,
-        igst: gst.igst,
+        rate: product.price ?? 0,
+        gst_percent: product.gst_percent,
+        discount_amount: 0,
+        total_price: product.price ?? 0,
+        gst_amount: ((product.price ?? 0) * (product.gst_percent ?? 0)) / 100,
       };
       setCartItems([...cartItems, newItem]);
     }
     setSearchTerm('');
   }
 
-  function updateQuantity(itemId: string, newQuantity: number) {
+  function updateQuantity(cartId: string, newQuantity: number) {
     if (newQuantity < 1) {
-      removeFromCart(itemId);
+      removeFromCart(cartId);
       return;
     }
 
     setCartItems(
       cartItems.map((item) => {
-        if (item.id === itemId) {
-          const amount = item.rate * newQuantity;
-          const gst = calculateGST(amount, item.gstPercent);
+        if (item.cart_id === cartId) {
+          const rate = item.rate ?? 0;
+          const gstPercent = item.gst_percent ?? 0;
+          const totalPrice = rate * newQuantity;
+          const gstAmount = (totalPrice * gstPercent) / 100;
           return {
             ...item,
             quantity: newQuantity,
-            amount,
-            cgst: gst.cgst,
-            sgst: gst.sgst,
-            igst: gst.igst,
+            total_price: totalPrice,
+            gst_amount: gstAmount,
           };
         }
         return item;
@@ -148,20 +147,14 @@ export default function Billing() {
     );
   }
 
-  function removeFromCart(itemId: string) {
-    setCartItems(cartItems.filter((item) => item.id !== itemId));
+  function removeFromCart(cartId: string) {
+    setCartItems(cartItems.filter((item) => item.cart_id !== cartId));
   }
 
   // Calculate totals
-  const subtotal = cartItems.reduce((sum, item) => sum + item.amount, 0);
-  const totalCgst = cartItems.reduce((sum, item) => sum + item.cgst * item.quantity, 0);
-  const totalSgst = cartItems.reduce((sum, item) => sum + item.sgst * item.quantity, 0);
-  const totalIgst = cartItems.reduce((sum, item) => sum + item.igst * item.quantity, 0);
-  const totalGst = totalCgst + totalSgst + totalIgst;
-  const afterDiscount = subtotal + totalGst - discount;
-  const roundOff = Math.round(afterDiscount) - afterDiscount;
-  const grandTotal = Math.round(afterDiscount);
-  const dueAmount = grandTotal - paidAmount;
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.total_price ?? 0), 0);
+  const totalGst = cartItems.reduce((sum, item) => sum + (item.gst_amount ?? 0), 0);
+  const grandTotal = Math.round(subtotal + totalGst - discount);
 
   async function handleSaveInvoice() {
     if (cartItems.length === 0) {
@@ -169,56 +162,48 @@ export default function Billing() {
       return;
     }
 
-    if (!settings) {
-      toast.error('Settings not loaded');
-      return;
-    }
-
     try {
-      const invoiceNumber = `${settings.invoicePrefix}-${String(settings.nextInvoiceNumber).padStart(5, '0')}`;
-      
-      const now = new Date();
-      const receiptTime = now.toTimeString().slice(0, 8).replace(/:/g, ''); // HHMMSS format
-      
-      const invoice = await addInvoice({
-        invoiceNumber,
-        customerId: selectedCustomer?.id,
-        customerName: selectedCustomer?.name || 'Walk-in Customer',
-        customerPhone: selectedCustomer?.phone,
-        customerGstin: selectedCustomer?.gstin,
-        customerAddress: selectedCustomer?.address,
-        customerStateCode: selectedCustomer?.stateCode,
-        customerStateName: selectedCustomer?.stateName,
-        items: cartItems.map(({ id, ...item }) => item),
-        subtotal,
-        totalCgst,
-        totalSgst,
-        totalIgst,
-        totalGst,
-        discount,
-        roundOff,
-        grandTotal,
-        paidAmount: paymentMode === 'credit' ? 0 : paidAmount || grandTotal,
-        dueAmount: paymentMode === 'credit' ? grandTotal : Math.max(0, grandTotal - (paidAmount || grandTotal)),
-        paymentMode,
-        status: paymentMode === 'credit' ? 'unpaid' : paidAmount >= grandTotal ? 'paid' : 'partial',
-        invoiceDate: now,
-        // POS PATROL fields
-        receiptTime,
-        businessDate: now,
-        transactionStatus: 'SALES',
-        locationCode: settings.locationCode || '01',
-        terminalId: settings.terminalId || '01',
-        shiftNo: settings.currentShift || '01',
+      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`; // Simplified invoice number
+
+      const invoiceData = {
+        invoice_number: invoiceNumber,
+        customer_id: selectedCustomer?.id,
+        customer_name: selectedCustomer?.name || 'Walk-in Customer',
+        customer_phone: selectedCustomer?.phone,
+        customer_gstin: selectedCustomer?.gstin,
+        total_gst: totalGst,
+        grand_total: grandTotal,
+        status: paidAmount >= grandTotal ? 'paid' : 'draft',
+        invoice_date: new Date().toISOString(),
+      };
+
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert(invoiceData)
+        .select('id')
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      const invoiceItemsData = cartItems.map(item => {
+        const { cart_id, ...rest } = item;
+        return { ...rest, invoice_id: invoice.id };
       });
+
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(invoiceItemsData);
+
+      if (itemsError) throw itemsError;
 
       toast.success(`Invoice ${invoiceNumber} created successfully!`);
       navigate('/invoices');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving invoice:', error);
-      toast.error('Failed to save invoice');
+      toast.error('Failed to save invoice', { description: error.message });
     }
   }
+  
 
   if (loading) {
     return (
@@ -235,9 +220,6 @@ export default function Billing() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">New Bill</h1>
-          <p className="text-muted-foreground">
-            Invoice #{settings?.invoicePrefix}-{String(settings?.nextInvoiceNumber || 1).padStart(5, '0')}
-          </p>
         </div>
       </div>
 
@@ -291,15 +273,15 @@ export default function Billing() {
                     <div>
                       <p className="font-medium text-foreground">{product.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {product.sku && `SKU: ${product.sku} | `}Stock: {product.stock} {product.unit}
+                        {product.sku && `SKU: ${product.sku} | `}Stock: {product.stock_quantity} {product.unit}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-mono-numbers font-medium text-foreground">
-                        {formatCurrency(product.sellingPrice)}
+                        {formatCurrency(product.price)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        GST: {product.gstPercent}%
+                        GST: {product.gst_percent}%
                       </p>
                     </div>
                   </button>
@@ -315,13 +297,13 @@ export default function Billing() {
               <div className="space-y-3">
                 {cartItems.map((item) => (
                   <div
-                    key={item.id}
+                    key={item.cart_id}
                     className="flex items-center justify-between rounded-lg border border-border p-3"
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-foreground">{item.productName}</p>
+                      <p className="font-medium text-foreground">{item.product_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(item.rate)} × {item.quantity} = {formatCurrency(item.amount)}
+                        {formatCurrency(item.rate)} × {item.quantity} = {formatCurrency(item.total_price)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -329,7 +311,7 @@ export default function Billing() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() => updateQuantity(item.cart_id, (item.quantity ?? 0) - 1)}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
@@ -340,7 +322,7 @@ export default function Billing() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.cart_id, (item.quantity ?? 0) + 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -348,7 +330,7 @@ export default function Billing() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => removeFromCart(item.id)}
+                        onClick={() => removeFromCart(item.cart_id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -376,19 +358,9 @@ export default function Billing() {
                 <span className="font-mono-numbers">{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">CGST</span>
-                <span className="font-mono-numbers">{formatCurrency(totalCgst)}</span>
+                <span className="text-muted-foreground">GST</span>
+                <span className="font-mono-numbers">{formatCurrency(totalGst)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">SGST</span>
-                <span className="font-mono-numbers">{formatCurrency(totalSgst)}</span>
-              </div>
-              {totalIgst > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">IGST</span>
-                  <span className="font-mono-numbers">{formatCurrency(totalIgst)}</span>
-                </div>
-              )}
               
               <div className="flex items-center justify-between pt-2">
                 <span className="text-muted-foreground">Discount</span>
@@ -402,15 +374,6 @@ export default function Billing() {
                 />
               </div>
 
-              {roundOff !== 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Round Off</span>
-                  <span className="font-mono-numbers">
-                    {roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}
-                  </span>
-                </div>
-              )}
-
               <div className="flex justify-between border-t border-border pt-2 text-lg font-bold">
                 <span>Grand Total</span>
                 <span className="font-mono-numbers text-primary">{formatCurrency(grandTotal)}</span>
@@ -418,25 +381,6 @@ export default function Billing() {
             </div>
 
             <div className="mt-4 space-y-3">
-              <div>
-                <Label className="mb-1.5 block text-sm">Payment Mode</Label>
-                <Select
-                  value={paymentMode}
-                  onValueChange={(v) => setPaymentMode(v as any)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="upi">UPI</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="credit">Credit (Due)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {paymentMode !== 'credit' && (
                 <div>
                   <Label className="mb-1.5 block text-sm">Amount Received</Label>
                   <Input
@@ -453,7 +397,6 @@ export default function Billing() {
                     </p>
                   )}
                 </div>
-              )}
             </div>
 
             <div className="mt-6 flex gap-2">

@@ -1,3 +1,10 @@
+[?25l[?2004h
+                                                                                                         
+  >  1. jjytcbtmlumklbgckari [name: thefluffymunchkin, org: nlorkggxhnkwmwmzwkua, region: ap-southeast-1]
+                                                                                                         
+                                                                                                         
+    ↑/k up • ↓/j down • / filter • q quit • ? more                                                       
+                                                                                                         [6A [J[2K[?2004l[?25h[?1002l[?1003l[?1006lSelected project: jjytcbtmlumklbgckari
 export type Json =
   | string
   | number
@@ -14,144 +21,209 @@ export type Database = {
   }
   public: {
     Tables: {
+      approved_google_users: {
+        Row: {
+          created_at: string | null
+          email: string
+          role: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          role?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          role?: string | null
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address: string | null
           created_at: string
           email: string | null
           gstin: string | null
-          id: string
+          id: number
           name: string
           phone: string | null
-          state_code: string | null
-          state_name: string | null
-          updated_at: string
         }
         Insert: {
           address?: string | null
           created_at?: string
           email?: string | null
           gstin?: string | null
-          id?: string
+          id?: number
           name: string
           phone?: string | null
-          state_code?: string | null
-          state_name?: string | null
-          updated_at?: string
         }
         Update: {
           address?: string | null
           created_at?: string
           email?: string | null
           gstin?: string | null
-          id?: string
+          id?: number
           name?: string
           phone?: string | null
-          state_code?: string | null
-          state_name?: string | null
-          updated_at?: string
         }
         Relationships: []
+      }
+      invoice_items: {
+        Row: {
+          discount_amount: number | null
+          gst_amount: number | null
+          gst_percent: number | null
+          hsn: string | null
+          id: number
+          invoice_id: number
+          product_id: number | null
+          product_name: string
+          quantity: number
+          rate: number
+          total_price: number
+          unit: string | null
+        }
+        Insert: {
+          discount_amount?: number | null
+          gst_amount?: number | null
+          gst_percent?: number | null
+          hsn?: string | null
+          id?: number
+          invoice_id: number
+          product_id?: number | null
+          product_name: string
+          quantity: number
+          rate: number
+          total_price: number
+          unit?: string | null
+        }
+        Update: {
+          discount_amount?: number | null
+          gst_amount?: number | null
+          gst_percent?: number | null
+          hsn?: string | null
+          id?: number
+          invoice_id?: number
+          product_id?: number | null
+          product_name?: string
+          quantity?: number
+          rate?: number
+          total_price?: number
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_payments: {
+        Row: {
+          amount: number
+          id: number
+          invoice_id: number
+          payment_date: string
+          payment_method_id: string | null
+          payment_method_name: string
+        }
+        Insert: {
+          amount: number
+          id?: number
+          invoice_id: number
+          payment_date?: string
+          payment_method_id?: string | null
+          payment_method_name: string
+        }
+        Update: {
+          amount?: number
+          id?: number
+          invoice_id?: number
+          payment_date?: string
+          payment_method_id?: string | null
+          payment_method_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invoices: {
         Row: {
           business_date: string | null
           created_at: string
-          customer_address: string | null
           customer_gstin: string | null
-          customer_id: string | null
+          customer_id: number | null
           customer_name: string | null
           customer_phone: string | null
-          customer_state_code: string | null
-          customer_state_name: string | null
-          due_amount: number
           grand_total: number
-          id: string
+          id: number
           invoice_date: string
           invoice_number: string
-          items: Json
           location_code: string | null
-          original_invoice_id: string | null
-          paid_amount: number
-          payment_mode: string | null
           receipt_time: string | null
           return_amount: number | null
           shift_no: string | null
-          status: string | null
-          subtotal: number
+          status: Database["public"]["Enums"]["invoice_status"] | null
           terminal_id: string | null
-          total_cgst: number
-          total_gst: number
-          total_igst: number
-          total_sgst: number
+          total_gst: number | null
           transaction_status: string | null
-          updated_at: string
         }
         Insert: {
           business_date?: string | null
           created_at?: string
-          customer_address?: string | null
           customer_gstin?: string | null
-          customer_id?: string | null
+          customer_id?: number | null
           customer_name?: string | null
           customer_phone?: string | null
-          customer_state_code?: string | null
-          customer_state_name?: string | null
-          due_amount?: number
-          grand_total?: number
-          id?: string
-          invoice_date?: string
+          grand_total: number
+          id?: number
+          invoice_date: string
           invoice_number: string
-          items?: Json
           location_code?: string | null
-          original_invoice_id?: string | null
-          paid_amount?: number
-          payment_mode?: string | null
           receipt_time?: string | null
           return_amount?: number | null
           shift_no?: string | null
-          status?: string | null
-          subtotal?: number
+          status?: Database["public"]["Enums"]["invoice_status"] | null
           terminal_id?: string | null
-          total_cgst?: number
-          total_gst?: number
-          total_igst?: number
-          total_sgst?: number
+          total_gst?: number | null
           transaction_status?: string | null
-          updated_at?: string
         }
         Update: {
           business_date?: string | null
           created_at?: string
-          customer_address?: string | null
           customer_gstin?: string | null
-          customer_id?: string | null
+          customer_id?: number | null
           customer_name?: string | null
           customer_phone?: string | null
-          customer_state_code?: string | null
-          customer_state_name?: string | null
-          due_amount?: number
           grand_total?: number
-          id?: string
+          id?: number
           invoice_date?: string
           invoice_number?: string
-          items?: Json
           location_code?: string | null
-          original_invoice_id?: string | null
-          paid_amount?: number
-          payment_mode?: string | null
           receipt_time?: string | null
           return_amount?: number | null
           shift_no?: string | null
-          status?: string | null
-          subtotal?: number
+          status?: Database["public"]["Enums"]["invoice_status"] | null
           terminal_id?: string | null
-          total_cgst?: number
-          total_gst?: number
-          total_igst?: number
-          total_sgst?: number
+          total_gst?: number | null
           transaction_status?: string | null
-          updated_at?: string
         }
         Relationships: [
           {
@@ -161,51 +233,6 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "invoices_original_invoice_id_fkey"
-            columns: ["original_invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payments: {
-        Row: {
-          amount: number
-          created_at: string
-          id: string
-          invoice_id: string
-          notes: string | null
-          payment_date: string
-          payment_mode: string | null
-        }
-        Insert: {
-          amount?: number
-          created_at?: string
-          id?: string
-          invoice_id: string
-          notes?: string | null
-          payment_date?: string
-          payment_mode?: string | null
-        }
-        Update: {
-          amount?: number
-          created_at?: string
-          id?: string
-          invoice_id?: string
-          notes?: string | null
-          payment_date?: string
-          payment_mode?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payments_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
         ]
       }
       products: {
@@ -213,106 +240,58 @@ export type Database = {
           created_at: string
           description: string | null
           gst_percent: number
-          hsn_code: string | null
-          id: string
+          hsn: string | null
+          id: number
+          low_stock_alert: number
           name: string
           price: number
-          stock: number
-          unit: string | null
-          updated_at: string
+          purchase_price: number | null
+          sku: string | null
+          stock_quantity: number | null
+          unit: string
         }
         Insert: {
           created_at?: string
           description?: string | null
           gst_percent?: number
-          hsn_code?: string | null
-          id?: string
+          hsn?: string | null
+          id?: number
+          low_stock_alert?: number
           name: string
-          price?: number
-          stock?: number
-          unit?: string | null
-          updated_at?: string
+          price: number
+          purchase_price?: number | null
+          sku?: string | null
+          stock_quantity?: number | null
+          unit?: string
         }
         Update: {
           created_at?: string
           description?: string | null
           gst_percent?: number
-          hsn_code?: string | null
-          id?: string
+          hsn?: string | null
+          id?: number
+          low_stock_alert?: number
           name?: string
           price?: number
-          stock?: number
-          unit?: string | null
-          updated_at?: string
+          purchase_price?: number | null
+          sku?: string | null
+          stock_quantity?: number | null
+          unit?: string
         }
         Relationships: []
       }
-      settings: {
+      profiles: {
         Row: {
-          bank_account: string | null
-          bank_ifsc: string | null
-          bank_name: string | null
-          created_at: string
-          current_shift: string | null
           id: string
-          invoice_prefix: string | null
-          location_code: string | null
-          next_invoice_number: number | null
-          shop_address: string | null
-          shop_email: string | null
-          shop_gstin: string | null
-          shop_name: string | null
-          shop_phone: string | null
-          shop_state_name: string | null
-          state_code: string | null
-          terminal_id: string | null
-          terms_conditions: string | null
-          updated_at: string
-          upi_id: string | null
+          role: string
         }
         Insert: {
-          bank_account?: string | null
-          bank_ifsc?: string | null
-          bank_name?: string | null
-          created_at?: string
-          current_shift?: string | null
-          id?: string
-          invoice_prefix?: string | null
-          location_code?: string | null
-          next_invoice_number?: number | null
-          shop_address?: string | null
-          shop_email?: string | null
-          shop_gstin?: string | null
-          shop_name?: string | null
-          shop_phone?: string | null
-          shop_state_name?: string | null
-          state_code?: string | null
-          terminal_id?: string | null
-          terms_conditions?: string | null
-          updated_at?: string
-          upi_id?: string | null
+          id: string
+          role?: string
         }
         Update: {
-          bank_account?: string | null
-          bank_ifsc?: string | null
-          bank_name?: string | null
-          created_at?: string
-          current_shift?: string | null
           id?: string
-          invoice_prefix?: string | null
-          location_code?: string | null
-          next_invoice_number?: number | null
-          shop_address?: string | null
-          shop_email?: string | null
-          shop_gstin?: string | null
-          shop_name?: string | null
-          shop_phone?: string | null
-          shop_state_name?: string | null
-          state_code?: string | null
-          terminal_id?: string | null
-          terms_conditions?: string | null
-          updated_at?: string
-          upi_id?: string | null
+          role?: string
         }
         Relationships: []
       }
@@ -324,7 +303,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      invoice_status: "draft" | "paid" | "void"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -451,6 +430,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      invoice_status: ["draft", "paid", "void"],
+    },
   },
 } as const

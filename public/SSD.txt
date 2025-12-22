@@ -1,0 +1,574 @@
+
+
+
+
+
+CONTENTS
+A.	Scope	3
+B.	General Information	4
+C.	Deployment of POS Patrol | Integra	6
+1.	Approach	6
+2.	Data Parameters	7
+A)	Transaction details [Retail, F&B & Forex]	7
+B)	Transaction details [Lounge]	9
+C)	Item details	11
+D)	Payment details	12
+E)	Data Access Credentials	13
+3.	Integration Architecture | POS Patrol - Integra	14
+A)  Check List for POSpatrol | Integra	14
+D.	Deployment of POS Patrol | Print	14
+1.	Integration Architecture | POS Patrol - Print	15
+A)	Check List for POSpatrol | Print	17
+E.	Project Coordinates	17
+F.	Next Steps	19
+G.	Sign Off	20
+
+
+
+
+A. SCOPE
+
+VR Chennai in its vision of becoming the world's leading shopping center company is moving towards digital transformation and has chosen Pathfinder as its preferred vendor to implement Retail Contract Management System (RCMS)
+
+This system will help VR Chennai to establish transparency with concessionaires and provide intelligence for overall operational efficiency. 
+
+As part of the RCMS, Pathfinder will implement an automated solution capturing Sales data which will be implemented. The information required to develop the interface is detailed in this document. 
+
+We'd appreciate your cooperation to make this engagement successful
+
+The Objectives of the solution are as follows:
+* Design, develop & deploy POS PATROL - Integra & Print to capture sales data on a real-time basis or at agreed frequency
+* During this process, Concessionaire shall extend the fullest cooperation and support to 'PATHFINDER' to achieve this Goal
+* The developed agent will be tested at concessionaire's test environment, deployed at production environment and monitored for a period of 30 days for consistency & accuracy of data
+We are confident this activity will greatly help our mutual interests, we look forward to your cooperation and support with VR Mall and PATHFINDER.
+
+
+B. GENERAL INFORMATION
+
+Organization Name
+
+List Brand(s) owned or franchised
+
+Locations at various Malls along with number of tills at each site
+
+Engagement Coordinates
+Business Contact
+
+Engagement Coordinates
+Technical Contact
+
+Is internet connectivity available at the outlet? Yes/No
+
+Name of POS Software & Version in use
+
+
+
+
+
+Are you considering to upgrade or replace your current POS systems?
+If Yes, detail new POS system and by when is this change expected?
+-
+Is the POS software managed in house or contracted to a vendor?
+If Contracted, please share coordinates
+-
+Database Specification
+(Oracle / MS SQL / MySQL / MS Access / Proprietary)
+-
+Operating System Platform - Windows / Linux
+-
+If Windows, Production / Deployment environment 32 / 64bit
+
+POS application type - Desktop / Web based
+-
+Database Storage - POS / Central
+-
+Database Availability
+(On premise / Off Premise - Head Office / Data Centre)
+-
+Database structure to identify different brands, locations & tills within the same property
+-
+Do you allow multi-currency transactions at POS?
+If Yes, please specify how the exchange rate is handled?
+-
+
+
+
+
+
+C. DEPLOYMENT OF POS PATROL | INTEGRA
+1. APPROACH
+* In this approach, agreed data parameters are extracted directly from the store's production database
+* On Premise Database
+o Provide Direct access to production database table & field information (or)
+o Provide Database views of agreed data parameters with read only access at local production environment (or) 
+o Share API documentation to access agreed data parameters with read only access.
+* Off Premise Database (Subject to approval by Mall Commercial & IT)
+o If the database is hosted outside the Mall premise at the head office or data center:
+* Provide Direct access to production database table & field information (or)
+* Provide Database views of agreed data parameters with read only access at production environment (or)
+* Share API documentation to access agreed data parameters with read only access.
+* Provide a WEB Service of agreed data parameters
+* Once the inputs are shared, a service based utility will be developed exclusively for the brand by PATHFINDER and deployed at the store till or head office / data center which will automatically extracts data at agreed intervals, encrypts and pushes the file over a secure connection to the data staging server over local LAN or Internet for reporting.
+
+
+	
+
+2.  DATA PARAMETERS
+A) TRANSACTION DETAILS [RETAIL & F&B]
+
+Data Name
+Mandatory
+Description
+Table & Field Name
+Join Table & Field Name 
+Comments
+LOCATION_CODE
+Yes
+Branch/POS ID of the store or with default value 01
+
+
+
+TERMINAL_ID
+Yes
+Terminal ID of the POS till or with default value 01
+
+ 
+
+SHIFT_NO
+Yes
+Shift of the day or with default value 01
+
+ 
+
+RCPT_NUM
+Yes
+Is the receipt number of this transaction
+
+ 
+
+RCPT_DT
+Yes
+Receipt date in YYYYMMDD format
+
+ 
+
+BUSINESS_DT
+Yes
+Business date in YYYYMMDD format
+
+
+
+RCPT_TM
+Yes
+Receipt time in HHMMSS, 24-hour System Time
+
+
+
+INV_AMT
+Yes
+Is the receipt total amount
+
+
+
+TAX_AMT
+Yes
+Is the total tax collected
+
+
+
+RET_AMT
+Yes
+Is the total Return amount
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+Data Name
+Mandatory
+Description
+Table & Field Name
+Join Table & Field Name 
+Comments
+CUST_NAME
+No
+Is the Customer Name
+
+
+
+CUST_GEN
+No
+M - Male, F - Female
+ 
+ 
+ 
+CUST_NATION
+No
+Nationality of the customer
+ 
+ 
+ 
+CUST_EMAIL
+No
+Email address of the customer
+ 
+ 
+ 
+CUST_CONT
+No
+Customer Contact number
+ 
+ 
+ 
+CUST_PAX_TYPE
+No
+Is the Type of Passenger - A - Arrival, D - Departure, S - Transit, T - Transfer & O - Others                                                                    
+
+
+
+CUST_PP_NO
+No
+Is the passport number of the customer
+
+
+
+CUST_BP
+No
+Boarding Pass Number
+
+
+
+CUST_FL_NO
+No
+Is the Flight number of the customer                                        
+
+
+
+CUST_FL_CLASS
+No
+Is the Passenger flight boarding Class
+
+
+
+CUST_ORIGIN
+No
+Is the Passenger Origin 
+
+
+
+CUST_DESTINATION
+No
+Is the Passenger Destination
+
+
+
+CUST_BR_GATE_NO
+No
+Is the Passenger flight boarding Gate
+
+
+
+CUST_PNR_NO
+No
+Is the Passenger Name Record
+
+
+
+VOUCH_CODE
+No
+Is the Passenger Voucher/Coupon/Promo Code
+
+
+
+TRAN_STATUS
+Yes
+Is the Type of Transaction. SALES or RETURN
+
+
+
+OP_CUR
+No
+Operational currency code. INR, USD, CNY etc.
+
+
+
+BC_EXCH
+No
+Is the Exchange rate of Operational currency
+
+
+
+
+
+
+
+B) PAYMENT DETAILS
+
+Data Name
+Mandatory
+Description
+Table & Field Name
+Join Table & Field Name 
+Comments
+PAYMENT_NAME
+Yes
+Is the name of payment mode. CASH , CC, CHEQUE & OTHERS
+
+
+
+CURRENCY_CODE
+Yes
+Tendered currency. INR, USD, CNY etc.
+
+
+
+EXCHANGE_RATE
+Yes
+Is the Exchange rate of Tendered currency
+
+
+
+TENDER_AMOUNT
+Yes
+Is the amount of tendered
+
+
+
+OP_CUR
+Yes
+Operational currency code. INR, USD, CNY etc.
+
+
+
+BC_EXCH
+Yes
+Is the Exchange rate of Operational currency code
+
+
+
+PAYMENT_STATUS
+Yes
+Is the Type of Transaction. SALES or RETURN
+
+
+
+
+
+
+      * The above table to be filled by the Concessionaire's IT Database Administrator:
+
+
+
+
+
+
+
+
+C) DATA ACCESS CREDENTIALS
+1. DATABASE CREDENTIALS
+
+Host Address/Server Name
+DB Name
+User Name
+Password
+
+
+
+
+    
+    If applicable, below details are required to be filled
+    
+    DB file folder - 
+    Port Number - 	 
+    Mention Company Name as in Database -
+    Mention Financial Year as in Database -
+    Parameter for Store Procedure - 
+    
+    * Above table applicable for Database View and Stored procedure also.
+2. WEB SERVICE / API CREDENTIALS
+
+URL
+User Name
+Password
+Methods
+Parameters
+Return Type
+Access Token/Key 
+
+
+
+
+
+
+
+
+    Sales data in API as dataset, XML or Json format: API must contain Transaction, Payment & item detail. With static IP in URL which can be accessible from anywhere and date parameter from & to.
+
+
+
+3. INTEGRATION ARCHITECTURE | POS PATROL - INTEGRA
+
+
+A)  CHECK LIST FOR POSPATROL | INTEGRA
+
+Description
+Status
+OS Compatibility (Platform, Version)
+YES
+Administrator Access
+YES
+Network Connectivity
+YES
+Port access enabled
+YES
+AV & Firewall exceptions
+YES
+Permits USB port access for (Installation)
+YES
+
+
+
+
+
+D.  DEPLOYMENT OF POS PATROL | PRINT
+
+
+Name & Specification of POS Software used
+ 
+Operating System Platform
+(Windows / Linux)
+ 
+If Windows, Production / Deployment environment 32 / 64bit
+ 
+POS application type (Desktop / Web based)
+ 
+Number of brands, locations & tills
+ 
+Do you allow multi-currency transactions at POS?
+ 
+Detail the IT setup at the property
+(Environment, Configuration, OS, Network & Security)
+ 
+Detail POS Printer setup viz. USB / LPT / COM / Network
+ 
+Is the printing of receipts from the application routed through OPOS or standard windows driver?
+ 
+Share receipt formats of all transactions done at the till viz. Sales, Return, Exchange, VOID/Cancellation in PDF format
+ 
+ 
+
+
+
+1. INTEGRATION ARCHITECTURE | POS PATROL - PRINT
+
+- Insert Integration Architecture Diagram & Documentation (to be filled by CO @ Pathfinder)
+
+A)  CHECK LIST FOR POSPATROL | PRINT
+
+Description
+Status
+Provide replication of live setup for testing
+
+Administrator access to POS till for implementation
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+E.  NEXT STEPS
+* Fill in the Solution Specification Document, submission to Pathfinder
+
+* Develop the data base views/ API / Web Service consisting of data mentioned in Section C, Point #2
+
+* Connect with VR Mall or Pathfinder for any clarifications
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+F.  SIGN OFF
+
+Portfolio Name
+
+Project Name
+
+Project Code
+
+Tenant Name
+
+Outlet Name | Location| Landmark
+ 
+
+
+This acknowledge that the Project and Concessionaire SPOC had reviewed the services delivered by Pathfinder as per obligations outlined in the Solution Specification Document used during the project.
+
+
+Project SPOC Name and Signature
+
+Concessionaire SPOC Name and Signature
+
+Pathfinder SPOC Name and Signature
+
+*Signature with date is mandatory
+
+
+
+
+
+18
+POS Integration | Integration Document						
+
+
+
+
+

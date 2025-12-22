@@ -4,149 +4,101 @@ import { Search, Eye, Printer, Send, FileText, RotateCcw, ArrowLeftRight } from 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { getInvoices, getSettings, Invoice, Settings, formatCurrency, createReturnInvoice, InvoiceItem } from '@/lib/db';
+import { supabase } from '@/integrations/supabase/supabaseClient';
+import { type Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
+
+// Type alias for Supabase invoice data
+type Invoice = Database['public']['Tables']['invoices']['Row'] & {
+  customers: { name: string } | null;
+};
+type InvoiceItem = Database['public']['Tables']['invoice_items']['Row'];
+
+function formatCurrency(amount: number | null) {
+  if (amount === null) return '-';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
+}
 
 export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedInvoiceItems, setSelectedInvoiceItems] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  const [returnInvoice, setReturnInvoice] = useState<Invoice | null>(null);
-  const [selectedReturnItems, setSelectedReturnItems] = useState<Record<number, boolean>>({});
-  const [returnQuantities, setReturnQuantities] = useState<Record<number, number>>({});
-  const [processingReturn, setProcessingReturn] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
+    setLoading(true);
     try {
-      const [inv, sett] = await Promise.all([getInvoices(), getSettings()]);
-      setInvoices(inv);
-      setSettings(sett || null);
-    } catch (error) {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*, customers(name)') // Fetch customer name via relationship
+        .order('invoice_date', { ascending: false });
+
+      if (error) throw error;
+      setInvoices(data || []);
+    } catch (error: any) {
       console.error('Error loading invoices:', error);
-      toast.error('Failed to load invoices');
+      toast.error('Failed to load invoices', { description: error.message });
     } finally {
       setLoading(false);
     }
   }
 
-  const filteredInvoices = invoices.filter(
-    (inv) =>
-      inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.customerName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  async function fetchInvoiceDetails(invoiceId: number) {
+    try {
+      const { data, error } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoiceId);
+      
+      if (error) throw error;
+      setSelectedInvoiceItems(data || []);
 
-  function handlePrint(invoice: Invoice) {
-    const printContent = document.getElementById('invoice-print-content');
-    if (printContent) {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Invoice ${invoice.invoiceNumber}</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background: #f5f5f5; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .details { display: flex; justify-content: space-between; margin-bottom: 20px; }
-                .totals { margin-top: 20px; text-align: right; }
-                .total-row { display: flex; justify-content: flex-end; gap: 40px; margin: 5px 0; }
-                .grand-total { font-size: 18px; font-weight: bold; margin-top: 10px; }
-              </style>
-            </head>
-            <body>
-              ${printContent.innerHTML}
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.print();
-      }
+    } catch (error: any) {
+      console.error('Error fetching invoice details:', error);
+      toast.error('Failed to load invoice details', { description: error.message });
     }
   }
 
+  const filteredInvoices = invoices.filter(
+    (inv) =>
+      inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.customers?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  function handlePrint(invoice: Invoice) {
+    // Print functionality will be simplified for now. 
+    // A more robust solution can be built later.
+    toast.info("Print functionality is under development.");
+  }
+
   function handleWhatsApp(invoice: Invoice) {
-    const text = `Invoice ${invoice.invoiceNumber}\nTotal: ${formatCurrency(invoice.grandTotal)}\nThank you for your business!`;
-    const phone = invoice.customerPhone?.replace(/\D/g, '');
+    const text = `Invoice ${invoice.invoice_number}\nTotal: ${formatCurrency(invoice.grand_total)}\nThank you!`;
+    const phone = invoice.customer_phone?.replace(/\D/g, '');
     const url = phone
       ? `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   }
-
-  function openReturnDialog(invoice: Invoice) {
-    // Only allow returns for SALES invoices
-    if (invoice.transactionStatus === 'RETURN') {
-      toast.error('Cannot create return for a return invoice');
-      return;
-    }
-    setReturnInvoice(invoice);
-    setSelectedReturnItems({});
-    setReturnQuantities(
-      invoice.items.reduce((acc, _, idx) => ({ ...acc, [idx]: 1 }), {})
-    );
-    setReturnDialogOpen(true);
-  }
-
-  async function handleProcessReturn() {
-    if (!returnInvoice || !settings) return;
-    
-    const itemsToReturn: InvoiceItem[] = [];
-    
-    returnInvoice.items.forEach((item, idx) => {
-      if (selectedReturnItems[idx]) {
-        const qty = Math.min(returnQuantities[idx] || 1, item.quantity);
-        const ratio = qty / item.quantity;
-        itemsToReturn.push({
-          ...item,
-          quantity: qty,
-          amount: item.amount * ratio,
-          cgst: item.cgst * ratio,
-          sgst: item.sgst * ratio,
-          igst: item.igst * ratio,
-        });
-      }
-    });
-    
-    if (itemsToReturn.length === 0) {
-      toast.error('Please select at least one item to return');
-      return;
-    }
-    
-    setProcessingReturn(true);
-    try {
-      const newReturnInvoice = await createReturnInvoice(returnInvoice, itemsToReturn, settings);
-      toast.success(`Return invoice ${newReturnInvoice.invoiceNumber} created`);
-      setReturnDialogOpen(false);
-      setReturnInvoice(null);
-      loadData();
-    } catch (error) {
-      console.error('Error creating return:', error);
-      toast.error('Failed to create return invoice');
-    } finally {
-      setProcessingReturn(false);
-    }
+  
+  function handleViewInvoice(invoice: Invoice) {
+    setSelectedInvoice(invoice);
+    fetchInvoiceDetails(invoice.id);
   }
 
   if (loading) {
@@ -207,14 +159,14 @@ export default function Invoices() {
               {filteredInvoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td className="font-medium font-mono-numbers">
-                    {invoice.invoiceNumber}
+                    {invoice.invoice_number}
                   </td>
                   <td>
-                    <Badge 
-                      variant={invoice.transactionStatus === 'RETURN' ? 'destructive' : 'secondary'}
+                    <Badge
+                      variant={invoice.transaction_status === 'RETURN' ? 'destructive' : 'secondary'}
                       className="text-xs"
                     >
-                      {invoice.transactionStatus === 'RETURN' ? (
+                      {invoice.transaction_status === 'RETURN' ? (
                         <><RotateCcw className="h-3 w-3 mr-1" /> Return</>
                       ) : (
                         'Sale'
@@ -222,23 +174,21 @@ export default function Invoices() {
                     </Badge>
                   </td>
                   <td className="text-muted-foreground">
-                    {format(new Date(invoice.invoiceDate), 'dd MMM yyyy')}
+                    {format(new Date(invoice.invoice_date), 'dd MMM yyyy')}
                   </td>
-                  <td>{invoice.customerName}</td>
+                  <td>{invoice.customers?.name || 'Walk-in'}</td>
                   <td className="font-mono-numbers font-medium">
-                    {invoice.transactionStatus === 'RETURN' ? '-' : ''}{formatCurrency(invoice.grandTotal)}
+                    {invoice.transaction_status === 'RETURN' ? '-' : ''}{formatCurrency(invoice.grand_total)}
                   </td>
                   <td>
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         invoice.status === 'paid'
                           ? 'bg-success/10 text-success'
-                          : invoice.status === 'partial'
-                          ? 'bg-warning/10 text-warning'
-                          : 'bg-destructive/10 text-destructive'
+                          : 'bg-destructive/10 text-destructive' // Simplified from 'partial'
                       }`}
                     >
-                      {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                      {invoice.status ? invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1) : 'Draft'}
                     </span>
                   </td>
                   <td>
@@ -247,7 +197,7 @@ export default function Invoices() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => setSelectedInvoice(invoice)}
+                        onClick={() => handleViewInvoice(invoice)}
                         title="View"
                       >
                         <Eye className="h-4 w-4" />
@@ -256,10 +206,7 @@ export default function Invoices() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => {
-                          setSelectedInvoice(invoice);
-                          setTimeout(() => handlePrint(invoice), 100);
-                        }}
+                        onClick={() => handlePrint(invoice)}
                         title="Print"
                       >
                         <Printer className="h-4 w-4" />
@@ -273,12 +220,12 @@ export default function Invoices() {
                       >
                         <Send className="h-4 w-4" />
                       </Button>
-                      {invoice.transactionStatus !== 'RETURN' && (
+                      {invoice.transaction_status !== 'RETURN' && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => openReturnDialog(invoice)}
+                          onClick={() => toast.info('Return functionality is under development.')}
                           title="Create Return"
                         >
                           <ArrowLeftRight className="h-4 w-4" />
@@ -310,64 +257,41 @@ export default function Invoices() {
       <Dialog open={!!selectedInvoice} onOpenChange={() => setSelectedInvoice(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Invoice {selectedInvoice?.invoiceNumber}</DialogTitle>
+            <DialogTitle>Invoice {selectedInvoice?.invoice_number}</DialogTitle>
           </DialogHeader>
           {selectedInvoice && (
             <div id="invoice-print-content" className="space-y-6">
-              {/* Shop Header */}
               <div className="text-center border-b border-border pb-4">
-                <h2 className="text-xl font-bold text-foreground">
-                  {settings?.shopName || 'My Shop'}
-                </h2>
-                {settings?.shopAddress && (
-                  <p className="text-sm text-muted-foreground">{settings.shopAddress}</p>
-                )}
-                {settings?.shopPhone && (
-                  <p className="text-sm text-muted-foreground">Phone: {settings.shopPhone}</p>
-                )}
-                {settings?.shopGstin && (
-                  <p className="text-sm font-mono-numbers text-muted-foreground">
-                    GSTIN: {settings.shopGstin}
-                  </p>
-                )}
+                <h2 className="text-xl font-bold text-foreground">Your Shop Name</h2>
+                {/* Shop details will be added back later */}
               </div>
 
-              {/* Invoice Details */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Bill To:</p>
-                  <p className="font-medium text-foreground">{selectedInvoice.customerName}</p>
-                  {selectedInvoice.customerPhone && <p>{selectedInvoice.customerPhone}</p>}
-                  {selectedInvoice.customerGstin && (
-                    <p className="font-mono-numbers">GSTIN: {selectedInvoice.customerGstin}</p>
+                  <p className="font-medium text-foreground">{selectedInvoice.customer_name}</p>
+                  {selectedInvoice.customer_phone && <p>{selectedInvoice.customer_phone}</p>}
+                  {selectedInvoice.customer_gstin && (
+                    <p className="font-mono-numbers">GSTIN: {selectedInvoice.customer_gstin}</p>
                   )}
-                  {selectedInvoice.customerAddress && <p>{selectedInvoice.customerAddress}</p>}
                 </div>
                 <div className="text-right">
                   <p>
                     <span className="text-muted-foreground">Invoice No:</span>{' '}
-                    <span className="font-mono-numbers font-medium">{selectedInvoice.invoiceNumber}</span>
+                    <span className="font-mono-numbers font-medium">{selectedInvoice.invoice_number}</span>
                   </p>
                   <p>
                     <span className="text-muted-foreground">Date:</span>{' '}
-                    {format(new Date(selectedInvoice.invoiceDate), 'dd MMM yyyy')}
+                    {format(new Date(selectedInvoice.invoice_date), 'dd MMM yyyy')}
                   </p>
-                  {selectedInvoice.dueDate && (
-                    <p>
-                      <span className="text-muted-foreground">Due Date:</span>{' '}
-                      {format(new Date(selectedInvoice.dueDate), 'dd MMM yyyy')}
-                    </p>
-                  )}
                 </div>
               </div>
 
-              {/* Items Table */}
               <div className="overflow-hidden rounded-lg border border-border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/50">
                       <th className="p-2 text-left">Item</th>
-                      <th className="p-2 text-center">HSN</th>
                       <th className="p-2 text-center">Qty</th>
                       <th className="p-2 text-right">Rate</th>
                       <th className="p-2 text-center">GST%</th>
@@ -375,19 +299,20 @@ export default function Invoices() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedInvoice.items.map((item, idx) => (
+                    {selectedInvoiceItems.map((item, idx) => (
                       <tr key={idx} className="border-t border-border">
-                        <td className="p-2">{item.productName}</td>
-                        <td className="p-2 text-center font-mono-numbers">{item.hsn || '-'}</td>
+                        <td className="p-2">{item.product_name}</td>
                         <td className="p-2 text-center font-mono-numbers">
-                          {item.quantity} {item.unit}
+                          {item.quantity}
                         </td>
                         <td className="p-2 text-right font-mono-numbers">
                           {formatCurrency(item.rate)}
                         </td>
-                        <td className="p-2 text-center font-mono-numbers">{item.gstPercent}%</td>
+                        <td className="p-2 text-center font-mono-numbers">
+                           {/* GST percent needs to be fetched or calculated */}
+                        </td>
                         <td className="p-2 text-right font-mono-numbers">
-                          {formatCurrency(item.amount)}
+                          {formatCurrency(item.total_price)}
                         </td>
                       </tr>
                     ))}
@@ -395,52 +320,25 @@ export default function Invoices() {
                 </table>
               </div>
 
-              {/* Totals */}
               <div className="flex justify-end">
                 <div className="w-64 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.subtotal)}</span>
+                     <span className="font-mono-numbers">{formatCurrency(selectedInvoice.grand_total - (selectedInvoice.total_gst ?? 0))}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">CGST</span>
-                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.totalCgst)}</span>
+                    <span className="text-muted-foreground">GST</span>
+                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.total_gst)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">SGST</span>
-                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.totalSgst)}</span>
-                  </div>
-                  {selectedInvoice.totalIgst > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">IGST</span>
-                      <span className="font-mono-numbers">{formatCurrency(selectedInvoice.totalIgst)}</span>
-                    </div>
-                  )}
-                  {selectedInvoice.discount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Discount</span>
-                      <span className="font-mono-numbers">-{formatCurrency(selectedInvoice.discount)}</span>
-                    </div>
-                  )}
-                  {selectedInvoice.roundOff !== 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Round Off</span>
-                      <span className="font-mono-numbers">
-                        {selectedInvoice.roundOff > 0 ? '+' : ''}{selectedInvoice.roundOff.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
                   <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
                     <span>Grand Total</span>
-                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.grandTotal)}</span>
+                    <span className="font-mono-numbers">{formatCurrency(selectedInvoice.grand_total)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
                 <p>Thank you for your business!</p>
-                {settings?.termsAndConditions && <p className="mt-2">{settings.termsAndConditions}</p>}
               </div>
             </div>
           )}
@@ -461,104 +359,6 @@ export default function Invoices() {
               Share on WhatsApp
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Return Dialog */}
-      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5" />
-              Create Return Invoice
-            </DialogTitle>
-            <DialogDescription>
-              Select items to return from invoice {returnInvoice?.invoiceNumber}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {returnInvoice && (
-            <div className="space-y-4">
-              <div className="max-h-64 overflow-y-auto space-y-3">
-                {returnInvoice.items.map((item, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`p-3 rounded-lg border ${
-                      selectedReturnItems[idx] ? 'border-primary bg-primary/5' : 'border-border'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id={`return-item-${idx}`}
-                        checked={selectedReturnItems[idx] || false}
-                        onCheckedChange={(checked) => 
-                          setSelectedReturnItems({ ...selectedReturnItems, [idx]: !!checked })
-                        }
-                      />
-                      <div className="flex-1">
-                        <Label 
-                          htmlFor={`return-item-${idx}`} 
-                          className="font-medium cursor-pointer"
-                        >
-                          {item.productName}
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(item.rate)} × {item.quantity} {item.unit} = {formatCurrency(item.amount + item.cgst + item.sgst + item.igst)}
-                        </p>
-                        {selectedReturnItems[idx] && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <Label className="text-xs">Return Qty:</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={item.quantity}
-                              value={returnQuantities[idx] || 1}
-                              onChange={(e) => setReturnQuantities({
-                                ...returnQuantities,
-                                [idx]: Math.min(Math.max(1, parseInt(e.target.value) || 1), item.quantity)
-                              })}
-                              className="w-20 h-8"
-                            />
-                            <span className="text-xs text-muted-foreground">of {item.quantity}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Return Summary */}
-              {Object.values(selectedReturnItems).some(v => v) && (
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-sm font-medium">Return Summary</p>
-                  <p className="text-lg font-bold font-mono-numbers text-destructive">
-                    -{formatCurrency(
-                      returnInvoice.items.reduce((sum, item, idx) => {
-                        if (!selectedReturnItems[idx]) return sum;
-                        const qty = Math.min(returnQuantities[idx] || 1, item.quantity);
-                        const ratio = qty / item.quantity;
-                        return sum + (item.amount + item.cgst + item.sgst + item.igst) * ratio;
-                      }, 0)
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive"
-              onClick={handleProcessReturn}
-              disabled={processingReturn || !Object.values(selectedReturnItems).some(v => v)}
-            >
-              {processingReturn ? 'Processing...' : 'Create Return'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppLayout>

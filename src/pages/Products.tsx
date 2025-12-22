@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { Plus, Search, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -19,17 +20,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import {
-  getProducts,
-  addProduct,
-  updateProduct,
-  deleteProduct,
-  Product,
-  formatCurrency,
-} from '@/lib/db';
+import { supabase } from '@/integrations/supabase/supabaseClient';
+import { type Database } from '@/integrations/supabase/types';
+
+// Type alias for our product row
+type Product = Database['public']['Tables']['products']['Row'];
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const UNITS = ['Pcs', 'Kg', 'Ltr', 'Mtr', 'Box', 'Dz', 'Set', 'Pair'];
+
+// Helper function to format currency
+function formatCurrency(amount: number | null) {
+  if (amount === null) return '-';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
+}
 
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -38,6 +45,8 @@ export default function Products() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Form state still uses camelCase for easier form handling.
+  // We'll map to snake_case on submission.
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -55,12 +64,19 @@ export default function Products() {
   }, []);
 
   async function loadProducts() {
+    setLoading(true);
     try {
-      const data = await getProducts();
-      setProducts(data);
-    } catch (error) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setProducts(data || []);
+    } catch (error: any) {
       console.error('Error loading products:', error);
-      toast.error('Failed to load products');
+      toast.error('Failed to load products', { description: error.message });
     } finally {
       setLoading(false);
     }
@@ -69,7 +85,7 @@ export default function Products() {
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   function resetForm() {
@@ -89,16 +105,17 @@ export default function Products() {
 
   function handleEdit(product: Product) {
     setEditingProduct(product);
+    // Map snake_case from DB to camelCase for the form
     setFormData({
       name: product.name,
-      sku: product.sku,
-      hsn: product.hsn,
-      gstPercent: product.gstPercent,
-      purchasePrice: product.purchasePrice,
-      sellingPrice: product.sellingPrice,
-      stock: product.stock,
-      unit: product.unit,
-      lowStockAlert: product.lowStockAlert,
+      sku: product.sku || '',
+      hsn: product.hsn || '',
+      gstPercent: product.gst_percent ?? 18,
+      purchasePrice: product.purchase_price ?? 0,
+      sellingPrice: product.price ?? 0, // 'price' in DB is sellingPrice
+      stock: product.stock_quantity ?? 0,
+      unit: product.unit ?? 'Pcs',
+      lowStockAlert: product.low_stock_alert ?? 10,
     });
     setIsDialogOpen(true);
   }
@@ -111,33 +128,61 @@ export default function Products() {
       return;
     }
 
+    // Map formData (camelCase) to DB fields (snake_case)
+    const productData = {
+      name: formData.name,
+      sku: formData.sku || null,
+      hsn: formData.hsn || null,
+      gst_percent: formData.gstPercent,
+      purchase_price: formData.purchasePrice,
+      price: formData.sellingPrice, // sellingPrice maps to price
+      stock_quantity: formData.stock,
+      unit: formData.unit,
+      low_stock_alert: formData.lowStockAlert,
+    };
+
     try {
+      let error;
       if (editingProduct) {
-        await updateProduct(editingProduct.id, formData);
-        toast.success('Product updated successfully');
+        // Update
+        const { error: updateError } = await supabase
+          .from('products')
+          .update(productData)
+          .eq('id', editingProduct.id);
+        error = updateError;
+        if (!error) toast.success('Product updated successfully');
       } else {
-        await addProduct(formData);
-        toast.success('Product added successfully');
+        // Insert
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert(productData);
+        error = insertError;
+        if (!error) toast.success('Product added successfully');
       }
+
+      if (error) throw error;
+
       await loadProducts();
       setIsDialogOpen(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving product:', error);
-      toast.error('Failed to save product');
+      toast.error('Failed to save product', { description: error.message });
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: number) {
     if (!confirm('Are you sure you want to delete this product?')) return;
     
     try {
-      await deleteProduct(id);
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw error;
+      
       toast.success('Product deleted successfully');
       await loadProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting product:', error);
-      toast.error('Failed to delete product');
+      toast.error('Failed to delete product', { description: error.message });
     }
   }
 
@@ -236,8 +281,7 @@ export default function Products() {
                         <SelectItem key={unit} value={unit}>
                           {unit}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
+                      ))}</SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -348,24 +392,24 @@ export default function Products() {
                   </td>
                   <td>
                     <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {product.gstPercent}%
+                      {product.gst_percent}%
                     </span>
                   </td>
                   <td className="font-mono-numbers">
-                    {formatCurrency(product.sellingPrice)}
+                    {formatCurrency(product.price)}
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
                       <span
                         className={`font-mono-numbers font-medium ${
-                          product.stock <= product.lowStockAlert
+                          (product.stock_quantity ?? 0) <= (product.low_stock_alert ?? 0)
                             ? 'text-destructive'
                             : 'text-foreground'
                         }`}
                       >
-                        {product.stock} {product.unit}
+                        {product.stock_quantity} {product.unit}
                       </span>
-                      {product.stock <= product.lowStockAlert && (
+                      {(product.stock_quantity ?? 0) <= (product.low_stock_alert ?? 0) && (
                         <AlertTriangle className="h-4 w-4 text-warning" />
                       )}
                     </div>

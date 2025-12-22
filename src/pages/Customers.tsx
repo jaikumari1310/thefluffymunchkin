@@ -12,14 +12,11 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import {
-  getCustomers,
-  addCustomer,
-  updateCustomer,
-  deleteCustomer,
-  Customer,
-  formatCurrency,
-} from '@/lib/db';
+import { supabase } from '@/integrations/supabase/supabaseClient';
+import { type Database } from '@/integrations/supabase/types';
+
+// Type alias for our customer row
+type Customer = Database['public']['Tables']['customers']['Row'];
 
 export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -41,12 +38,19 @@ export default function Customers() {
   }, []);
 
   async function loadCustomers() {
+    setLoading(true);
     try {
-      const data = await getCustomers();
-      setCustomers(data);
-    } catch (error) {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setCustomers(data || []);
+    } catch (error: any) {
       console.error('Error loading customers:', error);
-      toast.error('Failed to load customers');
+      toast.error('Failed to load customers', { description: error.message });
     } finally {
       setLoading(false);
     }
@@ -55,7 +59,7 @@ export default function Customers() {
   const filteredCustomers = customers.filter(
     (c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone.includes(searchTerm)
+      (c.phone && c.phone.includes(searchTerm))
   );
 
   function resetForm() {
@@ -67,7 +71,7 @@ export default function Customers() {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name,
-      phone: customer.phone,
+      phone: customer.phone || '',
       gstin: customer.gstin || '',
       address: customer.address || '',
       email: customer.email || '',
@@ -83,33 +87,54 @@ export default function Customers() {
       return;
     }
 
+    const customerData = {
+      name: formData.name,
+      phone: formData.phone || null,
+      gstin: formData.gstin || null,
+      address: formData.address || null,
+      email: formData.email || null,
+    };
+
     try {
+      let error;
       if (editingCustomer) {
-        await updateCustomer(editingCustomer.id, formData);
-        toast.success('Customer updated successfully');
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update(customerData)
+          .eq('id', editingCustomer.id);
+        error = updateError;
+        if (!error) toast.success('Customer updated successfully');
       } else {
-        await addCustomer({ ...formData, balance: 0 });
-        toast.success('Customer added successfully');
+        const { error: insertError } = await supabase
+          .from('customers')
+          .insert(customerData);
+        error = insertError;
+        if (!error) toast.success('Customer added successfully');
       }
+
+      if (error) throw error;
+
       await loadCustomers();
       setIsDialogOpen(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving customer:', error);
-      toast.error('Failed to save customer');
+      toast.error('Failed to save customer', { description: error.message });
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: number) {
     if (!confirm('Are you sure you want to delete this customer?')) return;
     
     try {
-      await deleteCustomer(id);
+      const { error } = await supabase.from('customers').delete().eq('id', id);
+      if (error) throw error;
+      
       toast.success('Customer deleted successfully');
       await loadCustomers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting customer:', error);
-      toast.error('Failed to delete customer');
+      toast.error('Failed to delete customer', { description: error.message });
     }
   }
 
@@ -274,21 +299,6 @@ export default function Customers() {
                   </div>
                 )}
               </div>
-              {customer.balance !== 0 && (
-                <div className="mt-3 border-t border-border pt-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Balance</span>
-                    <span
-                      className={`font-semibold font-mono-numbers ${
-                        customer.balance > 0 ? 'text-success' : 'text-destructive'
-                      }`}
-                    >
-                      {formatCurrency(Math.abs(customer.balance))}
-                      {customer.balance > 0 ? ' CR' : ' DR'}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
         </div>
