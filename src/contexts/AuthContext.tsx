@@ -5,20 +5,14 @@ import React, {
   useState,
   useCallback,
 } from 'react';
-
 import { supabase } from '@/integrations/supabase/client';
-import { signInWithGoogle } from '@/lib/google-auth';
-import {
-  authenticateUser,
-  validateSession,
-  deleteSessionByToken,
-} from '@/lib/auth-db';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: any | null;
+  user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
@@ -26,74 +20,77 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const handleSession = useCallback(async () => {
-    setIsLoading(true);
-
-    const localToken = localStorage.getItem('auth_token');
-    const { data: { session: supabaseSession } } = await supabase.auth.getSession();
-
-    if (localToken) {
-      const { user } = await validateSession(localToken);
-      if (user) {
-        setUser(user);
-      } else {
-        localStorage.removeItem('auth_token');
-      }
-    } else if (supabaseSession) {
-      setUser(supabaseSession.user);
-    }
-
-    setIsLoading(false);
-  }, []);
-
   useEffect(() => {
-    handleSession();
+    // On initial load, fetch the current session
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
+    getInitialSession();
+
+    // Set up a listener for auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
         setUser(session?.user ?? null);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
+        // Also handle loading state if needed for real-time changes
+        if (_event === 'INITIAL_SESSION') {
+            setIsLoading(false);
+        } else {
+            setIsLoading(false); // Stop loading on any auth event
+        }
       }
-    });
+    );
 
     return () => {
+      // Clean up the listener when the component unmounts
       listener.subscription.unsubscribe();
     };
-  }, [handleSession]);
+  }, []);
 
-  const login = useCallback(async (username, password) => {
-    const result = await authenticateUser(username, password);
-    if (result) {
-      localStorage.setItem('auth_token', result.session.token);
-      setUser(result.user);
+  const login = useCallback(async (email, password) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Invalid login credentials' };
+    } finally {
+      setIsLoading(false);
     }
-    return { success: false, error: 'Invalid username or password' };
   }, []);
 
   const loginWithGoogle = useCallback(async () => {
+    setIsLoading(true);
     try {
-      await signInWithGoogle();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+      // The user will be redirected, so we don't need to set state here.
+      // The onAuthStateChange listener will handle it upon their return.
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Google sign-in failed' };
+    } finally {
+      // Don't set loading to false here, as a redirect is expected.
     }
   }, []);
 
   const logout = useCallback(async () => {
-    const localToken = localStorage.getItem('auth_token');
-    if (localToken) {
-      await deleteSessionByToken(localToken);
-      localStorage.removeItem('auth_token');
-    }
-    
+    setIsLoading(true);
     await supabase.auth.signOut();
     setUser(null);
-    window.location.href = '/login';
+    // No need to manually redirect, the App/Router should handle the unauthenticated state.
+    setIsLoading(false);
   }, []);
 
   return (
@@ -101,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: !isLoading && !!user,
         login,
         loginWithGoogle,
         logout,
@@ -113,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  const ctx = useContext(AuthContext.Provider);
+  if (!ctx) throw new Error('useAuth must be used inside an AuthProvider');
   return ctx;
 }
