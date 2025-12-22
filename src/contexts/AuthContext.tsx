@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext.Provider);
+  const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside an AuthProvider');
   return ctx;
 }
