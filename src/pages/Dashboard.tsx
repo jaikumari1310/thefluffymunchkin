@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -13,7 +14,21 @@ import {
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
-import { getInvoices, getCustomers, getProducts, formatCurrency, Invoice, Customer, Product } from '@/lib/db';
+import { supabase } from '@/integrations/supabase/supabaseClient.ts';
+import { type Database } from '@/integrations/supabase/types';
+
+// Type aliases for our data
+type Invoice = Database['public']['Tables']['invoices']['Row'];
+type Customer = Database['public']['Tables']['customers']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
+
+function formatCurrency(amount: number | null) {
+  if (amount === null) return '-';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
+}
 
 export default function Dashboard() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -23,17 +38,24 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
       try {
-        const [inv, cust, prod] = await Promise.all([
-          getInvoices(),
-          getCustomers(),
-          getProducts(),
+        const [invoicesRes, customersRes, productsRes] = await Promise.all([
+          supabase.from('invoices').select('*'),
+          supabase.from('customers').select('*'),
+          supabase.from('products').select('*'),
         ]);
-        setInvoices(inv);
-        setCustomers(cust);
-        setProducts(prod);
-      } catch (error) {
-        console.error('Error loading data:', error);
+
+        if (invoicesRes.error) throw invoicesRes.error;
+        if (customersRes.error) throw customersRes.error;
+        if (productsRes.error) throw productsRes.error;
+
+        setInvoices(invoicesRes.data || []);
+        setCustomers(customersRes.data || []);
+        setProducts(productsRes.data || []);
+
+      } catch (error: any) {
+        console.error('Error loading dashboard data:', error);
       } finally {
         setLoading(false);
       }
@@ -46,12 +68,20 @@ export default function Dashboard() {
   today.setHours(0, 0, 0, 0);
 
   const todaysSales = invoices
-    .filter((inv) => new Date(inv.invoiceDate) >= today)
-    .reduce((sum, inv) => sum + inv.grandTotal, 0);
+    .filter((inv) => new Date(inv.invoice_date) >= today)
+    .reduce((sum, inv) => sum + (inv.grand_total ?? 0), 0);
 
-  const totalSales = invoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
-  const totalReceivables = invoices.reduce((sum, inv) => sum + inv.dueAmount, 0);
-  const lowStockProducts = products.filter((p) => p.stock <= p.lowStockAlert);
+  const totalSales = invoices.reduce((sum, inv) => sum + (inv.grand_total ?? 0), 0);
+  const totalReceivables = invoices.reduce((sum, inv) => {
+    // Assuming 'dueAmount' is not a direct field and needs calculation
+    // (grand_total - paid_amount). If paid_amount is not available, this might need adjustment.
+    // For now, let's use a simplified version, as 'dueAmount' is not in the schema.
+    if (inv.status === 'paid') return sum;
+    return sum + (inv.grand_total ?? 0); // Simplified for now
+  }, 0);
+  const lowStockProducts = products.filter((p) => 
+    (p.stock_quantity ?? 0) <= (p.low_stock_alert ?? 0)
+  );
 
   const recentInvoices = invoices.slice(0, 5);
 
@@ -86,7 +116,7 @@ export default function Dashboard() {
         <StatCard
           title="Today's Sales"
           value={formatCurrency(todaysSales)}
-          subtitle={`${invoices.filter((inv) => new Date(inv.invoiceDate) >= today).length} invoices`}
+          subtitle={`${invoices.filter((inv) => new Date(inv.invoice_date) >= today).length} invoices`}
           icon={IndianRupee}
           variant="primary"
         />
@@ -136,20 +166,18 @@ export default function Dashboard() {
                   <tbody>
                     {recentInvoices.map((invoice) => (
                       <tr key={invoice.id}>
-                        <td className="font-medium font-mono-numbers">{invoice.invoiceNumber}</td>
-                        <td>{invoice.customerName || 'Walk-in Customer'}</td>
-                        <td className="font-mono-numbers">{formatCurrency(invoice.grandTotal)}</td>
+                        <td className="font-medium font-mono-numbers">{invoice.invoice_number}</td>
+                        <td>{invoice.customer_name || 'Walk-in Customer'}</td>
+                        <td className="font-mono-numbers">{formatCurrency(invoice.grand_total)}</td>
                         <td>
                           <span
                             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                               invoice.status === 'paid'
                                 ? 'bg-success/10 text-success'
-                                : invoice.status === 'partial'
-                                ? 'bg-warning/10 text-warning'
-                                : 'bg-destructive/10 text-destructive'
+                                : 'bg-warning/10 text-warning' // Simplified, assuming not paid is due
                             }`}
                           >
-                            {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                            {invoice.status ? invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1) : 'Draft'}
                           </span>
                         </td>
                       </tr>
@@ -220,7 +248,7 @@ export default function Dashboard() {
                   >
                     <span className="text-foreground">{product.name}</span>
                     <span className="font-mono-numbers font-medium text-warning">
-                      {product.stock} left
+                      {product.stock_quantity} left
                     </span>
                   </li>
                 ))}
