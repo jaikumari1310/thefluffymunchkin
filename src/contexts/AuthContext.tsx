@@ -6,7 +6,12 @@ import React, {
   useCallback,
 } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
+
+interface User extends SupabaseUser {
+  role?: 'admin' | 'staff';
+  displayName?: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -23,11 +28,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const fetchUserProfile = async (authUser: SupabaseUser): Promise<User> => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+      }
+
+      // If no profile exists, check approved_google_users for Google OAuth users
+      if (!profile && authUser.email) {
+        const { data: approvedUser } = await supabase
+          .from('approved_google_users')
+          .select('role')
+          .eq('email', authUser.email.toLowerCase())
+          .maybeSingle();
+
+        if (approvedUser) {
+          // Create profile for Google OAuth user
+          await supabase
+            .from('profiles')
+            .insert({ id: authUser.id, role: approvedUser.role })
+            .select()
+            .maybeSingle();
+
+          return {
+            ...authUser,
+            role: approvedUser.role as 'admin' | 'staff',
+            displayName: authUser.user_metadata?.name || authUser.email || 'User',
+          };
+        }
+      }
+
+      return {
+        ...authUser,
+        role: (profile?.role as 'admin' | 'staff') || 'staff',
+        displayName: authUser.user_metadata?.name || authUser.email || 'User',
+      };
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+      return {
+        ...authUser,
+        role: 'staff',
+        displayName: authUser.user_metadata?.name || authUser.email || 'User',
+      };
+    }
+  };
+
   useEffect(() => {
     // On initial load, fetch the current session
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        const userWithProfile = await fetchUserProfile(session.user);
+        setUser(userWithProfile);
+      } else {
+        setUser(null);
+      }
       setIsLoading(false);
     };
 
@@ -35,14 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up a listener for auth state changes
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        setUser(session?.user ?? null);
-        // Also handle loading state if needed for real-time changes
-        if (_event === 'INITIAL_SESSION') {
-            setIsLoading(false);
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        if (session?.user) {
+          const userWithProfile = await fetchUserProfile(session.user);
+          setUser(userWithProfile);
         } else {
-            setIsLoading(false); // Stop loading on any auth event
+          setUser(null);
         }
+        setIsLoading(false);
       }
     );
 

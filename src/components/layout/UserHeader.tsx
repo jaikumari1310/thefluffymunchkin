@@ -33,10 +33,10 @@ export function UserHeader() {
               <User className="h-4 w-4 text-primary" />
             </div>
             <div className="flex flex-col items-start text-left">
-              <span className="text-sm font-medium leading-tight">{user.displayName}</span>
+              <span className="text-sm font-medium leading-tight">{user.displayName || user.email}</span>
               <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
                 {user.role === 'admin' && <Shield className="h-3 w-3" />}
-                {user.role}
+                {user.role || 'staff'}
               </span>
             </div>
             <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
@@ -45,8 +45,8 @@ export function UserHeader() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium">{user.displayName}</p>
-              <p className="text-xs text-muted-foreground">@{user.username}</p>
+              <p className="text-sm font-medium">{user.displayName || user.email}</p>
+              <p className="text-xs text-muted-foreground">{user.email}</p>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
