@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/supabaseClient.ts';
+import { supabase } from '@/integrations/supabase/client.ts';
 import { type Database } from '@/integrations/supabase/types';
 
 type Product = Database['public']['Tables']['products']['Row'];

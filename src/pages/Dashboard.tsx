@@ -14,7 +14,7 @@ import {
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/supabaseClient.ts';
+import { supabase } from '@/integrations/supabase/client.ts';
 import { type Database } from '@/integrations/supabase/types';
 
 // Type aliases for our data
