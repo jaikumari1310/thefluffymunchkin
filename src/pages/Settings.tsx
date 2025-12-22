@@ -5,50 +5,84 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { getSettings, updateSettings, Settings } from '@/lib/db';
-import { Save, Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client.ts';
+import { type Database } from '@/integrations/supabase/types';
+import { Save, Copy, Eye, EyeOff } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+
 const API_BASE_URL = `https://likthkgwdrvfsrthgzbw.supabase.co/functions/v1`;
 
+type Settings = Database['public']['Tables']['settings']['Row'];
+
+// We will use camelCase for the form state for easier handling in React
+interface SettingsForm extends Omit<Settings, 'id' | 'created_at' | 'shop_name' | 'shop_address' | 'shop_phone' | 'shop_email' | 'shop_gstin' | 'invoice_prefix' | 'next_invoice_number' | 'state_code' | 'state_name' | 'bank_name' | 'bank_account' | 'bank_ifsc' | 'upi_id' | 'terms_and_conditions' | 'location_code' | 'terminal_id' | 'current_shift'> {
+  shopName: string;
+  shopAddress: string;
+  shopPhone: string;
+  shopEmail: string;
+  shopGstin: string;
+  invoicePrefix: string;
+  nextInvoiceNumber: number;
+  stateCode: string;
+  stateName: string;
+  bankName: string;
+  bankAccount: string;
+  bankIfsc: string;
+  upiId: string;
+  termsAndConditions: string;
+  locationCode: string;
+  terminalId: string;
+  currentShift: string;
+}
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Partial<Settings>>({
-    shopName: '',
-    shopAddress: '',
-    shopPhone: '',
-    shopEmail: '',
-    shopGstin: '',
-    invoicePrefix: 'INV',
-    stateCode: '27',
-    stateName: 'Maharashtra',
-    bankName: '',
-    bankAccount: '',
-    bankIfsc: '',
-    upiId: '',
-    termsAndConditions: '',
-    locationCode: '01',
-    terminalId: '01',
-    currentShift: '01',
-  });
+  const [formData, setFormData] = useState<Partial<SettingsForm>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   
-  // Generate a simple API key based on location code (in production, use proper auth)
-  const apiKey = `tfm_${settings.locationCode || '01'}_${btoa(settings.shopName || 'shop').slice(0, 8)}`;
+  const apiKey = `tfm_${formData.locationCode || '01'}_${btoa(formData.shopName || 'shop').slice(0, 8)}`;
 
   useEffect(() => {
     loadSettings();
   }, []);
 
   async function loadSettings() {
+    setLoading(true);
     try {
-      const data = await getSettings();
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
       if (data) {
-        setSettings(data);
+        // Map from snake_case (DB) to camelCase (form)
+        setFormData({
+          shopName: data.shop_name ?? '',
+          shopAddress: data.shop_address ?? '',
+          shopPhone: data.shop_phone ?? '',
+          shopEmail: data.shop_email ?? '',
+          shopGstin: data.shop_gstin ?? '',
+          invoicePrefix: data.invoice_prefix ?? 'INV',
+          nextInvoiceNumber: data.next_invoice_number ?? 1,
+          stateCode: data.state_code ?? '27',
+          stateName: data.state_name ?? 'Maharashtra',
+          bankName: data.bank_name ?? '',
+          bankAccount: data.bank_account ?? '',
+          bankIfsc: data.bank_ifsc ?? '',
+          upiId: data.upi_id ?? '',
+          termsAndConditions: data.terms_and_conditions ?? '',
+          locationCode: data.location_code ?? '01',
+          terminalId: data.terminal_id ?? '01',
+          currentShift: data.current_shift ?? '01',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading settings:', error);
-      toast.error('Failed to load settings');
+      toast.error('Failed to load settings', { description: error.message });
     } finally {
       setLoading(false);
     }
@@ -57,11 +91,35 @@ export default function SettingsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      await updateSettings(settings);
+      // Map from camelCase (form) to snake_case (DB)
+      const settingsData = {
+        id: 1, // Always upsert the same row
+        shop_name: formData.shopName,
+        shop_address: formData.shopAddress,
+        shop_phone: formData.shopPhone,
+        shop_email: formData.shopEmail,
+        shop_gstin: formData.shopGstin,
+        invoice_prefix: formData.invoicePrefix,
+        next_invoice_number: formData.nextInvoiceNumber,
+        state_code: formData.stateCode,
+        state_name: formData.stateName,
+        bank_name: formData.bankName,
+        bank_account: formData.bankAccount,
+        bank_ifsc: formData.bankIfsc,
+        upi_id: formData.upiId,
+        terms_and_conditions: formData.termsAndConditions,
+        location_code: formData.locationCode,
+        terminal_id: formData.terminalId,
+        current_shift: formData.currentShift,
+      };
+
+      const { error } = await supabase.from('settings').upsert(settingsData);
+
+      if (error) throw error;
       toast.success('Settings saved successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
+      toast.error('Failed to save settings', { description: error.message });
     } finally {
       setSaving(false);
     }
@@ -93,8 +151,8 @@ export default function SettingsPage() {
               <Label htmlFor="shopName">Shop Name</Label>
               <Input
                 id="shopName"
-                value={settings.shopName}
-                onChange={(e) => setSettings({ ...settings, shopName: e.target.value })}
+                value={formData.shopName}
+                onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
                 placeholder="My Shop"
               />
             </div>
@@ -102,8 +160,8 @@ export default function SettingsPage() {
               <Label htmlFor="shopAddress">Address</Label>
               <Textarea
                 id="shopAddress"
-                value={settings.shopAddress}
-                onChange={(e) => setSettings({ ...settings, shopAddress: e.target.value })}
+                value={formData.shopAddress}
+                onChange={(e) => setFormData({ ...formData, shopAddress: e.target.value })}
                 placeholder="Shop address"
                 rows={2}
               />
@@ -112,8 +170,8 @@ export default function SettingsPage() {
               <Label htmlFor="shopPhone">Phone</Label>
               <Input
                 id="shopPhone"
-                value={settings.shopPhone}
-                onChange={(e) => setSettings({ ...settings, shopPhone: e.target.value })}
+                value={formData.shopPhone}
+                onChange={(e) => setFormData({ ...formData, shopPhone: e.target.value })}
                 placeholder="+91 9876543210"
               />
             </div>
@@ -122,8 +180,8 @@ export default function SettingsPage() {
               <Input
                 id="shopEmail"
                 type="email"
-                value={settings.shopEmail}
-                onChange={(e) => setSettings({ ...settings, shopEmail: e.target.value })}
+                value={formData.shopEmail}
+                onChange={(e) => setFormData({ ...formData, shopEmail: e.target.value })}
                 placeholder="shop@email.com"
               />
             </div>
@@ -131,8 +189,8 @@ export default function SettingsPage() {
               <Label htmlFor="shopGstin">GSTIN</Label>
               <Input
                 id="shopGstin"
-                value={settings.shopGstin}
-                onChange={(e) => setSettings({ ...settings, shopGstin: e.target.value.toUpperCase() })}
+                value={formData.shopGstin}
+                onChange={(e) => setFormData({ ...formData, shopGstin: e.target.value.toUpperCase() })}
                 placeholder="22AAAAA0000A1Z5"
                 maxLength={15}
               />
@@ -141,8 +199,8 @@ export default function SettingsPage() {
               <Label htmlFor="stateName">State</Label>
               <Input
                 id="stateName"
-                value={settings.stateName}
-                onChange={(e) => setSettings({ ...settings, stateName: e.target.value })}
+                value={formData.stateName}
+                onChange={(e) => setFormData({ ...formData, stateName: e.target.value })}
                 placeholder="Maharashtra"
               />
             </div>
@@ -157,20 +215,20 @@ export default function SettingsPage() {
               <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
               <Input
                 id="invoicePrefix"
-                value={settings.invoicePrefix}
-                onChange={(e) => setSettings({ ...settings, invoicePrefix: e.target.value.toUpperCase() })}
+                value={formData.invoicePrefix}
+                onChange={(e) => setFormData({ ...formData, invoicePrefix: e.target.value.toUpperCase() })}
                 placeholder="INV"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Next invoice: {settings.invoicePrefix}-{String(settings.nextInvoiceNumber || 1).padStart(5, '0')}
+                Next invoice: {formData.invoicePrefix}-{String(formData.nextInvoiceNumber || 1).padStart(5, '0')}
               </p>
             </div>
             <div>
               <Label htmlFor="stateCode">State Code</Label>
               <Input
                 id="stateCode"
-                value={settings.stateCode}
-                onChange={(e) => setSettings({ ...settings, stateCode: e.target.value })}
+                value={formData.stateCode}
+                onChange={(e) => setFormData({ ...formData, stateCode: e.target.value })}
                 placeholder="27"
                 maxLength={2}
               />
@@ -193,8 +251,8 @@ export default function SettingsPage() {
               <Label htmlFor="locationCode">Location Code</Label>
               <Input
                 id="locationCode"
-                value={settings.locationCode}
-                onChange={(e) => setSettings({ ...settings, locationCode: e.target.value })}
+                value={formData.locationCode}
+                onChange={(e) => setFormData({ ...formData, locationCode: e.target.value })}
                 placeholder="01"
                 maxLength={10}
               />
@@ -206,8 +264,8 @@ export default function SettingsPage() {
               <Label htmlFor="terminalId">Terminal ID</Label>
               <Input
                 id="terminalId"
-                value={settings.terminalId}
-                onChange={(e) => setSettings({ ...settings, terminalId: e.target.value })}
+                value={formData.terminalId}
+                onChange={(e) => setFormData({ ...formData, terminalId: e.target.value })}
                 placeholder="01"
                 maxLength={10}
               />
@@ -219,8 +277,8 @@ export default function SettingsPage() {
               <Label htmlFor="currentShift">Current Shift</Label>
               <Input
                 id="currentShift"
-                value={settings.currentShift}
-                onChange={(e) => setSettings({ ...settings, currentShift: e.target.value })}
+                value={formData.currentShift}
+                onChange={(e) => setFormData({ ...formData, currentShift: e.target.value })}
                 placeholder="01"
                 maxLength={2}
               />
@@ -315,8 +373,8 @@ export default function SettingsPage() {
               <Label htmlFor="bankName">Bank Name</Label>
               <Input
                 id="bankName"
-                value={settings.bankName}
-                onChange={(e) => setSettings({ ...settings, bankName: e.target.value })}
+                value={formData.bankName}
+                onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
                 placeholder="State Bank of India"
               />
             </div>
@@ -324,8 +382,8 @@ export default function SettingsPage() {
               <Label htmlFor="bankAccount">Account Number</Label>
               <Input
                 id="bankAccount"
-                value={settings.bankAccount}
-                onChange={(e) => setSettings({ ...settings, bankAccount: e.target.value })}
+                value={formData.bankAccount}
+                onChange={(e) => setFormData({ ...formData, bankAccount: e.target.value })}
                 placeholder="1234567890"
               />
             </div>
@@ -333,8 +391,8 @@ export default function SettingsPage() {
               <Label htmlFor="bankIfsc">IFSC Code</Label>
               <Input
                 id="bankIfsc"
-                value={settings.bankIfsc}
-                onChange={(e) => setSettings({ ...settings, bankIfsc: e.target.value.toUpperCase() })}
+                value={formData.bankIfsc}
+                onChange={(e) => setFormData({ ...formData, bankIfsc: e.target.value.toUpperCase() })}
                 placeholder="SBIN0001234"
               />
             </div>
@@ -342,8 +400,8 @@ export default function SettingsPage() {
               <Label htmlFor="upiId">UPI ID</Label>
               <Input
                 id="upiId"
-                value={settings.upiId}
-                onChange={(e) => setSettings({ ...settings, upiId: e.target.value })}
+                value={formData.upiId}
+                onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
                 placeholder="shop@upi"
               />
             </div>
@@ -354,8 +412,8 @@ export default function SettingsPage() {
         <div className="stat-card">
           <h2 className="mb-4 text-base sm:text-lg font-semibold text-foreground">Terms & Conditions</h2>
           <Textarea
-            value={settings.termsAndConditions}
-            onChange={(e) => setSettings({ ...settings, termsAndConditions: e.target.value })}
+            value={formData.termsAndConditions}
+            onChange={(e) => setFormData({ ...formData, termsAndConditions: e.target.value })}
             placeholder="Enter terms and conditions to display on invoices..."
             rows={4}
           />

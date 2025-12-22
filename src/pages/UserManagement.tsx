@@ -29,21 +29,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import {
-  User as UserType,
-  getUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-  updateUserPassword,
-} from '@/lib/auth-db';
-import {
-  getApprovedGoogleUsers,
-  addApprovedGoogleUser,
-  removeApprovedGoogleUser,
-  ApprovedGoogleUser,
-  UserRole,
-} from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
+import { type Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Users,
@@ -61,9 +48,13 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
+type ApprovedGoogleUser = Database['public']['Tables']['approved_google_users']['Row'];
+type UserRole = UserProfile['role'];
+
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<UserType[]>([]);
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [approvedGoogleUsers, setApprovedGoogleUsers] = useState<ApprovedGoogleUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -72,16 +63,10 @@ export default function UserManagement() {
   const [showEditUser, setShowEditUser] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAddGoogleUser, setShowAddGoogleUser] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
   // Form states
-  const [newUser, setNewUser] = useState({
-    username: '',
-    password: '',
-    displayName: '',
-    email: '',
-    role: 'staff' as UserRole,
-  });
+  const [newUser, setNewUser] = useState({ email: '', password: '', displayName: '', role: 'staff' as UserRole });
   const [newPassword, setNewPassword] = useState('');
   const [newGoogleEmail, setNewGoogleEmail] = useState('');
   const [newGoogleRole, setNewGoogleRole] = useState<UserRole>('staff');
@@ -94,12 +79,16 @@ export default function UserManagement() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [usersData, googleUsersData] = await Promise.all([
-        getUsers(),
-        getApprovedGoogleUsers(),
+      const [profilesRes, googleUsersRes] = await Promise.all([
+        supabase.from('user_profiles').select('*'),
+        supabase.from('approved_google_users').select('*'),
       ]);
-      setUsers(usersData as any);
-      setApprovedGoogleUsers(googleUsersData);
+
+      if (profilesRes.error) throw profilesRes.error;
+      if (googleUsersRes.error) throw googleUsersRes.error;
+
+      setUserProfiles(profilesRes.data || []);
+      setApprovedGoogleUsers(googleUsersRes.data || []);
     } catch (error: any) {
       toast.error(error.message || 'Failed to load data');
     } finally {
@@ -108,11 +97,10 @@ export default function UserManagement() {
   };
 
   const handleAddUser = async () => {
-    if (!newUser.username.trim() || !newUser.password.trim() || !newUser.displayName.trim()) {
+    if (!newUser.email.trim() || !newUser.password.trim() || !newUser.displayName.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
-
     if (newUser.password.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
@@ -120,16 +108,23 @@ export default function UserManagement() {
 
     setIsSubmitting(true);
     try {
-      await createUser({
-        username: newUser.username.trim(),
+      const { data: { user }, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
         password: newUser.password,
-        displayName: newUser.displayName.trim(),
-        email: newUser.email.trim() || undefined,
-        role: newUser.role,
+        options: {
+          data: {
+            display_name: newUser.displayName,
+            role: newUser.role,
+          },
+        },
       });
-      toast.success('User created successfully');
+
+      if (authError) throw authError;
+      if (!user) throw new Error('User creation failed');
+      
+      toast.success('User created successfully. Please check email for verification.');
       setShowAddUser(false);
-      setNewUser({ username: '', password: '', displayName: '', email: '', role: 'staff' });
+      setNewUser({ email: '', password: '', displayName: '', role: 'staff' });
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to create user');
@@ -143,12 +138,16 @@ export default function UserManagement() {
 
     setIsSubmitting(true);
     try {
-      await updateUser(selectedUser.id, {
-        displayName: selectedUser.displayName,
-        email: selectedUser.email,
-        role: selectedUser.role,
-        isActive: selectedUser.isActive,
-      });
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          display_name: selectedUser.display_name,
+          role: selectedUser.role,
+          is_active: selectedUser.is_active,
+        })
+        .eq('id', selectedUser.id);
+
+      if (error) throw error;
       toast.success('User updated successfully');
       setShowEditUser(false);
       setSelectedUser(null);
@@ -162,48 +161,27 @@ export default function UserManagement() {
 
   const handleChangePassword = async () => {
     if (!selectedUser || !newPassword.trim()) return;
-
     if (newPassword.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
     }
-
-    setIsSubmitting(true);
-    try {
-      await updateUserPassword(selectedUser.id, newPassword);
-      toast.success('Password changed successfully');
-      setShowChangePassword(false);
-      setSelectedUser(null);
-      setNewPassword('');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to change password');
-    } finally {
-      setIsSubmitting(false);
-    }
+    // This requires admin privileges and is a server-side operation
+    toast.info("Password changes from this panel are not yet implemented.");
   };
 
-  const handleDeleteUser = async (user: UserType) => {
+  const handleDeleteUser = async (user: UserProfile) => {
     if (user.id === currentUser?.id) {
       toast.error("You cannot delete your own account");
       return;
     }
+    if (!confirm(`Are you sure you want to delete ${user.display_name}? This is irreversible.`)) return;
 
-    if (!confirm(`Are you sure you want to delete ${user.displayName}?`)) {
-      return;
-    }
-
-    try {
-      await deleteUser(user.id);
-      toast.success('User deleted successfully');
-      loadData();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete user');
-    }
+    // This requires admin privileges and is a server-side operation
+    toast.info("User deletion from this panel is not yet implemented.");
   };
 
   const handleAddGoogleUser = async () => {
     const email = newGoogleEmail.trim().toLowerCase();
-    
     if (!email || !email.includes('@')) {
       toast.error('Please enter a valid email address');
       return;
@@ -211,7 +189,8 @@ export default function UserManagement() {
 
     setIsSubmitting(true);
     try {
-      await addApprovedGoogleUser(email, newGoogleRole);
+      const { error } = await supabase.from('approved_google_users').insert({ email, role: newGoogleRole });
+      if (error) throw error;
       toast.success('Approved Google user added');
       setShowAddGoogleUser(false);
       setNewGoogleEmail('');
@@ -228,7 +207,8 @@ export default function UserManagement() {
     if (!confirm(`Remove ${email} from approved list?`)) return;
 
     try {
-      await removeApprovedGoogleUser(email);
+      const { error } = await supabase.from('approved_google_users').delete().eq('email', email);
+      if (error) throw error;
       toast.success('Removed from approved list');
       loadData();
     } catch (error: any) {
@@ -238,11 +218,7 @@ export default function UserManagement() {
 
   if (isLoading) {
     return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </AppLayout>
+      <AppLayout><div className="flex items-center justify-center h-[50vh]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></AppLayout>
     );
   }
 
@@ -255,106 +231,51 @@ export default function UserManagement() {
             <h1 className="text-2xl font-bold text-foreground">User Management</h1>
             <p className="text-muted-foreground">Manage users and access permissions</p>
           </div>
-          <Button onClick={() => setShowAddUser(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add User
-          </Button>
         </div>
 
-        {/* Local Users */}
+        {/* Standard Users */}
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle>Local Users</CardTitle>
+             <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <CardTitle>Standard Users</CardTitle>
+              </div>
+              <Button size="sm" onClick={() => setShowAddUser(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
             </div>
-            <CardDescription>Users with username and password login</CardDescription>
+            <CardDescription>Users who sign in with email and password.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Login</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Joined Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
-                {users.filter(u => u.authProvider === 'local').map((user) => (
+                {userProfiles.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                          <UserIcon className="h-4 w-4 text-primary" />
-                        </div>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10"><UserIcon className="h-4 w-4 text-primary" /></div>
                         <div>
-                          <p className="font-medium">{user.displayName}</p>
-                          {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+                          <p className="font-medium">{user.display_name}</p>
+                          <p className="text-xs text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">@{user.username}</TableCell>
-                    <TableCell>
-                      <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                        {user.role === 'admin' && <Shield className="h-3 w-3 mr-1" />}
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? 'outline' : 'destructive'}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {user.lastLogin ? format(new Date(user.lastLogin), 'dd MMM yyyy, HH:mm') : 'Never'}
-                    </TableCell>
+                    <TableCell><Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role === 'admin' && <Shield className="h-3 w-3 mr-1" />}{user.role}</Badge></TableCell>
+                    <TableCell><Badge variant={user.is_active ? 'outline' : 'destructive'}>{user.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{format(new Date(user.created_at), 'dd MMM yyyy')}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setShowChangePassword(true);
-                          }}
-                          title="Change password"
-                        >
-                          <Key className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedUser({ ...user });
-                            setShowEditUser(true);
-                          }}
-                          title="Edit user"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteUser(user)}
-                          disabled={user.id === currentUser?.id}
-                          title="Delete user"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => { setSelectedUser(user); setShowChangePassword(true); }} title="Change password"><Key className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { setSelectedUser({ ...user }); setShowEditUser(true); }} title="Edit user"><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)} disabled={user.id === currentUser?.id} title="Delete user"><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
                 ))}
-                {users.filter(u => u.authProvider === 'local').length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      No local users found
-                    </TableCell>
-                  </TableRow>
-                )}
+                {userProfiles.length === 0 && (<TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No standard users found</TableCell></TableRow>)}
               </TableBody>
             </Table>
           </CardContent>
@@ -371,61 +292,35 @@ export default function UserManagement() {
                   <CardDescription>Gmail IDs allowed to sign in with Google</CardDescription>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setShowAddGoogleUser(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Email
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowAddGoogleUser(true)}><Plus className="h-4 w-4 mr-2" />Add Email</Button>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4">
+             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4">
               <div className="flex gap-2">
                 <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
                 <div className="text-sm text-amber-800">
-                  <p className="font-medium">Google Sign-In Not Configured</p>
-                  <p className="mt-1">Google OAuth requires cloud integration. These approved emails will be used when Google Sign-In is enabled.</p>
+                  <p className="font-medium">A Google Cloud Project is Required</p>
+                  <p className="mt-1">To enable Google Sign-In, you must configure OAuth credentials in your Google Cloud project and add the keys to your Supabase settings.</p>
                 </div>
               </div>
             </div>
-            
             {approvedGoogleUsers.length > 0 ? (
               <div className="space-y-2">
                 {approvedGoogleUsers.map((gUser) => (
-                  <div
-                    key={gUser.email}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
-                  >
+                  <div key={gUser.email} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100">
-                        <UserCheck className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{gUser.email}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Added {format(new Date(gUser.created_at), 'dd MMM yyyy')}
-                        </p>
-                      </div>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100"><UserCheck className="h-4 w-4 text-green-600" /></div>
+                      <div><p className="font-medium">{gUser.email}</p><p className="text-xs text-muted-foreground">Added {format(new Date(gUser.created_at), 'dd MMM yyyy')}</p></div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={gUser.role === 'admin' ? 'default' : 'secondary'}>
-                        {gUser.role}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveGoogleUser(gUser.email)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <Badge variant={gUser.role === 'admin' ? 'default' : 'secondary'}>{gUser.role}</Badge>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveGoogleUser(gUser.email)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-center text-muted-foreground py-8">
-                No approved Google accounts. Add emails to allow Google Sign-In.
-              </p>
-            )}
+            ) : (<p className="text-center text-muted-foreground py-8">No approved Google accounts.</p>)}
           </CardContent>
         </Card>
       </div>
@@ -433,206 +328,55 @@ export default function UserManagement() {
       {/* Add User Dialog */}
       <Dialog open={showAddUser} onOpenChange={setShowAddUser}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>Create a new local user account</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Add New User</DialogTitle><DialogDescription>Create a new local user account</DialogDescription></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Display Name *</Label>
-              <Input
-                placeholder="John Doe"
-                value={newUser.displayName}
-                onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Username *</Label>
-              <Input
-                placeholder="johndoe"
-                value={newUser.username}
-                onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Password *</Label>
-              <Input
-                type="password"
-                placeholder="Minimum 6 characters"
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email (optional)</Label>
-              <Input
-                type="email"
-                placeholder="john@example.com"
-                value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={newUser.role}
-                onValueChange={(value: UserRole) => setNewUser({ ...newUser, role: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-2"><Label>Display Name *</Label><Input placeholder="John Doe" value={newUser.displayName} onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Email *</Label><Input type="email" placeholder="john@example.com" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Password *</Label><Input type="password" placeholder="Minimum 6 characters" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Role</Label><Select value={newUser.role} onValueChange={(value: UserRole) => setNewUser({ ...newUser, role: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddUser(false)}>Cancel</Button>
-            <Button onClick={handleAddUser} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create User
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowAddUser(false)}>Cancel</Button><Button onClick={handleAddUser} disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create User</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit User Dialog */}
       <Dialog open={showEditUser} onOpenChange={setShowEditUser}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>Update user information</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit User</DialogTitle><DialogDescription>Update user information</DialogDescription></DialogHeader>
           {selectedUser && (
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Display Name</Label>
-                <Input
-                  value={selectedUser.displayName}
-                  onChange={(e) => setSelectedUser({ ...selectedUser, displayName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={selectedUser.email || ''}
-                  onChange={(e) => setSelectedUser({ ...selectedUser, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select
-                  value={selectedUser.role}
-                  onValueChange={(value: UserRole) => setSelectedUser({ ...selectedUser, role: value })}
-                  disabled={selectedUser.id === currentUser?.id}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-2"><Label>Display Name</Label><Input value={selectedUser.display_name ?? ''} onChange={(e) => setSelectedUser({ ...selectedUser, display_name: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Role</Label><Select value={selectedUser.role ?? 'staff'} onValueChange={(value: UserRole) => setSelectedUser({ ...selectedUser, role: value })} disabled={selectedUser.id === currentUser?.id}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <Label>Active Status</Label>
-                  <p className="text-sm text-muted-foreground">Allow this user to log in</p>
-                </div>
-                <Switch
-                  checked={selectedUser.isActive}
-                  onCheckedChange={(checked) => setSelectedUser({ ...selectedUser, isActive: checked })}
-                  disabled={selectedUser.id === currentUser?.id}
-                />
+                <div><Label>Active Status</Label><p className="text-sm text-muted-foreground">Allow this user to log in</p></div>
+                <Switch checked={selectedUser.is_active} onCheckedChange={(checked) => setSelectedUser({ ...selectedUser, is_active: checked })} disabled={selectedUser.id === currentUser?.id} />
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditUser(false)}>Cancel</Button>
-            <Button onClick={handleUpdateUser} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowEditUser(false)}>Cancel</Button><Button onClick={handleUpdateUser} disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Change Password Dialog */}
       <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
-            <DialogDescription>
-              Set a new password for {selectedUser?.displayName}
-            </DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Change Password</DialogTitle><DialogDescription>Set a new password for {selectedUser?.display_name}</DialogDescription></DialogHeader>
           <div className="py-4">
-            <div className="space-y-2">
-              <Label>New Password</Label>
-              <Input
-                type="password"
-                placeholder="Minimum 6 characters"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
+            <div className="space-y-2"><Label>New Password</Label><Input type="password" placeholder="Minimum 6 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-            <Button onClick={handleChangePassword} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Change Password
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button><Button onClick={handleChangePassword} disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Change Password</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Approved Google User Dialog */}
       <Dialog open={showAddGoogleUser} onOpenChange={setShowAddGoogleUser}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Approved Google Account</DialogTitle>
-            <DialogDescription>
-              Allow a Gmail address to sign in with Google
-            </DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Add Approved Google Account</DialogTitle><DialogDescription>Allow a Gmail address to sign in with Google</DialogDescription></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Gmail Address *</Label>
-              <Input
-                type="email"
-                placeholder="user@gmail.com"
-                value={newGoogleEmail}
-                onChange={(e) => setNewGoogleEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={newGoogleRole}
-                onValueChange={(value: UserRole) => setNewGoogleRole(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-2"><Label>Gmail Address *</Label><Input type="email" placeholder="user@gmail.com" value={newGoogleEmail} onChange={(e) => setNewGoogleEmail(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Role</Label><Select value={newGoogleRole} onValueChange={(value: UserRole) => setNewGoogleRole(value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="staff">Staff</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddGoogleUser(false)}>Cancel</Button>
-            <Button onClick={handleAddGoogleUser} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Email
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowAddGoogleUser(false)}>Cancel</Button><Button onClick={handleAddGoogleUser} disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add Email</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </AppLayout>
