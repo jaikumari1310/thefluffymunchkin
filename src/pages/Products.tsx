@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/supabaseClient';
+import { supabase } from '@/integrations/supabase/supabaseClient.ts';
 import { type Database } from '@/integrations/supabase/types';
 
 // Type alias for our product row
