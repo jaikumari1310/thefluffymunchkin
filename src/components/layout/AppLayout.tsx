@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
-import Sidebar from './Sidebar';
-import UserHeader from './UserHeader';
+import { Sidebar } from './Sidebar';
+import { UserHeader } from './UserHeader';
 
 interface AppLayoutProps {
   children: ReactNode;
